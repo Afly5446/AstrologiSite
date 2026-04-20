@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Калькулятор совместимости по дате рождения</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tsparticles@3/tsparticles.bundle.min.js"></script>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <canvas id="particles"></canvas>
+    <div class="decor-stars" id="decorStars"></div>
+    <div class="decor-moon"></div>
+    <main class="page">
+      <section class="hero card">
+        <div class="hero-top">
+          <p class="tag">Нумеро + астроподсказки</p>
+          <button id="themeToggle" class="btn secondary theme-toggle" type="button">
+            Сменить тему
+          </button>
+        </div>
+        <h1>Узнайте вашу совместимость за 30 секунд ✨</h1>
+        <p class="subtitle">
+          Введите даты рождения, выберите тип отношений и получите красивый
+          разбор с советом недели.
+        </p>
+      </section>
+
+      <section class="calculator card">
+        <form id="compatibilityForm" class="form">
+          <div class="field-grid">
+            <label class="field">
+              <span>Ваше имя (опционально)</span>
+              <input type="text" id="name1" placeholder="Например, Анна" />
+            </label>
+            <label class="field">
+              <span>Имя партнёра (опционально)</span>
+              <input type="text" id="name2" placeholder="Например, Алексей" />
+            </label>
+          </div>
+
+          <div class="field-grid">
+            <label class="field">
+              <span>Ваша дата рождения</span>
+              <input type="date" id="birth1" required />
+            </label>
+            <label class="field">
+              <span>Дата рождения партнёра</span>
+              <input type="date" id="birth2" required />
+            </label>
+          </div>
+          <div class="field-grid">
+            <label class="field">
+              <span>Ваше время рождения (опционально)</span>
+              <input type="time" id="birthTime1" />
+            </label>
+            <label class="field">
+              <span>Время рождения партнёра (опционально)</span>
+              <input type="time" id="birthTime2" />
+            </label>
+          </div>
+          <div class="field-grid">
+            <label class="field">
+              <span>Ваш город рождения (опционально)</span>
+              <input type="text" id="city1" placeholder="Например, Москва" />
+            </label>
+            <label class="field">
+              <span>Город рождения партнёра (опционально)</span>
+              <input type="text" id="city2" placeholder="Например, Алматы" />
+            </label>
+          </div>
+          <div class="field-grid">
+            <label class="field">
+              <span>Ваш часовой пояс (IANA)</span>
+              <input type="text" id="timezone1" value="Europe/Moscow" required />
+            </label>
+            <label class="field">
+              <span>Часовой пояс партнёра (IANA)</span>
+              <input type="text" id="timezone2" value="Europe/Moscow" required />
+            </label>
+          </div>
+
+          <label class="field">
+            <span>Тип отношений</span>
+            <select id="relationshipType">
+              <option value="romance">Романтика</option>
+              <option value="friendship">Дружба</option>
+              <option value="business">Бизнес</option>
+            </select>
+          </label>
+
+          <button type="submit" class="btn primary">
+            Рассчитать совместимость
+          </button>
+        </form>
+      </section>
+
+      <section id="loaderSection" class="loader card hidden" aria-live="polite">
+        <div class="orb"></div>
+        <h2>Считываем энергии...</h2>
+        <p>Анализируем планеты, числа и ритмы вашей пары</p>
+        <div class="progress"><div class="progress-bar" id="progressBar"></div></div>
+      </section>
+
+      <section id="resultSection" class="result card hidden">
+        <header class="result-head">
+          <div>
+            <h2 id="resultTitle">💕 Совместимость: 0/100</h2>
+            <p id="resultSubtitle"></p>
+          </div>
+          <div class="chart-wrap">
+            <canvas id="scoreChart"></canvas>
+          </div>
+        </header>
+
+        <div class="result-grid">
+          <article class="info-block">
+            <h3>🌟 Западная астрология</h3>
+            <p id="westernText"></p>
+          </article>
+          <article class="info-block">
+            <h3>🐉 Китайский гороскоп</h3>
+            <p id="chineseText"></p>
+          </article>
+          <article class="info-block">
+            <h3>🔢 Нумерология</h3>
+            <p id="numerologyText"></p>
+          </article>
+          <article class="info-block">
+            <h3>💫 Бонус-анализ</h3>
+            <p id="bonusText"></p>
+          </article>
+        </div>
+
+        <div class="result-grid">
+          <article class="info-block">
+            <h3>✅ Green Flags пары</h3>
+            <ul id="greenFlagsList"></ul>
+          </article>
+          <article class="info-block">
+            <h3>🚩 Red Flags пары</h3>
+            <ul id="redFlagsList"></ul>
+          </article>
+          <article class="info-block">
+            <h3>📊 Совместимость по сферам</h3>
+            <p id="areasText"></p>
+          </article>
+          <article class="info-block">
+            <h3>🌙 Лучшие дни месяца</h3>
+            <div class="mini-chart-wrap">
+              <canvas id="energyTrendChart"></canvas>
+            </div>
+            <ul id="bestDaysList"></ul>
+          </article>
+        </div>
+
+        <div class="insights">
+          <div>
+            <h3>Сильные стороны</h3>
+            <ul id="strengthsList"></ul>
+          </div>
+          <div>
+            <h3>Зоны роста</h3>
+            <ul id="growthList"></ul>
+          </div>
+          <div>
+            <h3>Совет недели</h3>
+            <p id="weeklyAdvice"></p>
+          </div>
+        </div>
+
+        <div class="result-grid">
+          <article class="info-block">
+            <h3>🪐 Детали аспектов</h3>
+            <p id="aspectsText"></p>
+          </article>
+          <article class="info-block">
+            <h3>📈 Вектор совместимости</h3>
+            <p id="vectorText"></p>
+          </article>
+          <article class="info-block">
+            <h3>🗓️ Прогноз 3/6/12</h3>
+            <p id="timelineText"></p>
+          </article>
+          <article class="info-block">
+            <h3>🧭 Дополнительная динамика</h3>
+            <p id="dynamicsText"></p>
+          </article>
+        </div>
+
+        <div class="problem-solution">
+          <h3>Что делать с частыми вопросами</h3>
+          <div class="problem-grid">
+            <article>
+              <h4>«Мы ссоримся, но не понимаю почему»</h4>
+              <p id="conflictTip"></p>
+            </article>
+            <article>
+              <h4>«Есть ли серьёзные перспективы?»</h4>
+              <p id="forecastTip"></p>
+            </article>
+            <article>
+              <h4>«Интересно ради развлечения»</h4>
+              <p id="funTip"></p>
+            </article>
+          </div>
+        </div>
+
+        <div class="pro-block">
+          <h3>Pro-версия (углублённый разбор)</h3>
+          <ul>
+            <li>Положения Луны, Венеры, Марса по эфемеридам</li>
+            <li>Аспекты между планетами и их динамика</li>
+            <li>Расширенная нумерология: ЧЖП, судьба, вибрации пары</li>
+            <li>Китайская карта: животное + стихия года + элемент дня</li>
+          </ul>
+        </div>
+
+        <div class="actions">
+          <button id="shareBtn" class="btn secondary">Поделиться результатом</button>
+          <button id="downloadPngBtn" class="btn secondary">Скачать PNG</button>
+          <button id="expertBtn" class="btn accent">
+            Получить полный разбор (299 ₽)
+          </button>
+        </div>
+      </section>
+
+      <section class="crm card">
+        <h3>Заявка на экспертный разбор</h3>
+        <p class="subtitle">
+          Оставьте контакты, и астролог свяжется с вами с персональной программой.
+        </p>
+        <form id="crmForm" class="form">
+          <div class="field-grid">
+            <label class="field">
+              <span>Имя</span>
+              <input type="text" id="crmName" required placeholder="Ваше имя" />
+            </label>
+            <label class="field">
+              <span>Телефон или Telegram</span>
+              <input type="text" id="crmContact" required placeholder="+7 / @username" />
+            </label>
+          </div>
+          <label class="field">
+            <span>Комментарий</span>
+            <input
+              type="text"
+              id="crmMessage"
+              placeholder="Коротко: что хотите разобрать в первую очередь"
+            />
+          </label>
+          <button type="submit" class="btn primary">Отправить заявку</button>
+          <p id="crmStatus" class="status-text"></p>
+        </form>
+      </section>
+
+      <div id="chatHint" class="chat-hint">Задайте вопрос эксперту</div>
+      <button id="chatToggle" class="chat-toggle" aria-label="Открыть чат">
+        <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
+        </svg>
+      </button>
+
+      <div id="chatPanel" class="chat-panel hidden" aria-live="polite">
+        <header class="chat-header">
+          <div class="chat-avatar">
+            <img src="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=100&h=100&fit=crop&crop=face" alt="Эксперт" />
+          </div>
+          <div class="chat-title">
+            <h4>Эксперт</h4>
+            <p>Коуч по отношениям</p>
+          </div>
+          <button id="chatClose" class="chat-close">×</button>
+        </header>
+        </header>
+        <div id="chatMessages" class="chat-messages"></div>
+        <form id="chatForm" class="chat-input">
+          <input type="text" id="chatInput" placeholder="Напишите сообщение..." />
+          <button type="submit" class="chat-send" aria-label="Отправить">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+            </svg>
+          </button>
+        </form>
+      </div>
+    </main>
+
+    <script src="./script.js"></script>
+  </body>
+</html>
