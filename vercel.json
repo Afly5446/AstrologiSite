@@ -1,7 +1,12 @@
 {
-  "rewrites": [
-    { "source": "/api/compatibility", "destination": "/api/compatibility/api.py" },
-    { "source": "/api/leads", "destination": "/api/leads/api.py" },
-    { "source": "/api/chat", "destination": "/api/chat/api.py" }
+  "version": 2,
+  "builds": [
+    { "src": "api/index.py", "use": "@vercel/python" }
+  ],
+  "routes": [
+    { "src": "/api/compatibility", "dest": "api/index.py" },
+    { "src": "/api/leads", "dest": "api/index.py" },
+    { "src": "/api/chat", "dest": "api/index.py" },
+    { "src": "/leads", "dest": "api/index.py" }
   ]
 }
