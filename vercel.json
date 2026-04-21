@@ -1,33 +1,8 @@
 {
-  "github": {
-    "enabled": false
-  },
-  "builds": [
-    {
-      "src": "backend/app.py",
-      "use": "@vercel/python"
-    }
-  ],
   "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "backend/app.py"
-    },
-    {
-      "src": "/leads",
-      "dest": "backend/app.py"
-    },
-    {
-      "src": "/styles.css",
-      "dest": "/styles.css"
-    },
-    {
-      "src": "/script.js",
-      "dest": "/script.js"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/index.html"
-    }
+    { "src": "/api/compatibility", "dest": "api/compatibility.py" },
+    { "src": "/api/leads", "dest": "api/leads.py" },
+    { "src": "/api/chat", "dest": "api/chat.py" },
+    { "src": "/leads", "dest": "api/leads.py" }
   ]
 }
