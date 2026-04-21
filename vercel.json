@@ -1,8 +1,7 @@
 {
-  "routes": [
-    { "src": "/api/compatibility", "dest": "api/compatibility.py" },
-    { "src": "/api/leads", "dest": "api/leads.py" },
-    { "src": "/api/chat", "dest": "api/chat.py" },
-    { "src": "/leads", "dest": "api/leads.py" }
+  "rewrites": [
+    { "source": "/api/compatibility", "destination": "/api/compatibility/api.py" },
+    { "source": "/api/leads", "destination": "/api/leads/api.py" },
+    { "source": "/api/chat", "destination": "/api/chat/api.py" }
   ]
 }
