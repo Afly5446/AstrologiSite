@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import os
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -32,6 +34,41 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "").strip()
 app = Flask(__name__, static_folder=str(BASE_DIR), static_url_path="")
 
 
+def _telegram_proxy_dict() -> dict[str, str] | None:
+    raw = (
+        os.getenv("TELEGRAM_HTTPS_PROXY", "").strip()
+        or os.getenv("HTTPS_PROXY", "").strip()
+        or os.getenv("HTTP_PROXY", "").strip()
+    )
+    if not raw:
+        return None
+    return {"http": raw, "https": raw}
+
+
+def telegram_api_send(payload: dict[str, Any]) -> tuple[bool, str]:
+    """Вызов sendMessage с повторами. Возвращает (успех, текст ошибки)."""
+    if not TELEGRAM_BOT_TOKEN:
+        return False, "TELEGRAM_BOT_TOKEN не задан"
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    proxies = _telegram_proxy_dict()
+    last_err = ""
+    for attempt in range(3):
+        try:
+            resp = requests.post(url, json=payload, timeout=18, proxies=proxies)
+            try:
+                data = resp.json()
+            except ValueError:
+                data = {}
+            if resp.status_code == 200 and isinstance(data, dict) and data.get("ok"):
+                return True, ""
+            last_err = resp.text[:500] if resp.text else f"HTTP {resp.status_code}"
+        except Exception as exc:
+            last_err = str(exc)
+        if attempt < 2:
+            time.sleep(0.6 * (2**attempt))
+    return False, last_err
+
+
 class Base(DeclarativeBase):
     pass
 
@@ -49,6 +86,33 @@ class Lead(Base):
 
 engine = create_engine(DB_URL, future=True)
 Base.metadata.create_all(engine)
+
+
+def _telegram_failure_log_path() -> Path:
+    custom = os.getenv("LEAD_TELEGRAM_FALLBACK_LOG", "").strip()
+    if custom:
+        return Path(custom)
+    return Path(__file__).resolve().parent / "telegram_failed_leads.jsonl"
+
+
+def append_telegram_failure_backup(lead: Lead, reason: str) -> None:
+    """Резервная копия заявки, если Telegram недоступен (база уже сохранила лид)."""
+    record = {
+        "id": lead.id,
+        "created_at": lead.created_at.isoformat() if lead.created_at else None,
+        "name": lead.name,
+        "contact": lead.contact,
+        "message": lead.message,
+        "context": lead.context if isinstance(lead.context, dict) else {},
+        "telegram_error": reason[:500],
+    }
+    path = _telegram_failure_log_path()
+    try:
+        with path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        print(f"Заявка #{lead.id} продублирована в файл: {path}")
+    except OSError as exc:
+        print(f"Не удалось записать резервный лог заявок: {exc}")
 
 
 ZODIAC_SIGNS = [
@@ -596,6 +660,58 @@ def index() -> Any:
     return send_from_directory(BASE_DIR, "index.html")
 
 
+def _telegram_escape(text: str) -> str:
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def format_lead_telegram_message(
+    name: str,
+    contact: str,
+    body: str,
+    context: dict[str, Any] | None,
+    *,
+    lead_id: int | None = None,
+    at: datetime | None = None,
+) -> str:
+    lines: list[str] = []
+    header = "📋 <b>Новая заявка</b>"
+    if lead_id is not None:
+        header += f" <code>#{lead_id}</code>"
+    lines.append(header)
+    if at is not None:
+        utc = at.astimezone(timezone.utc) if at.tzinfo else at.replace(tzinfo=timezone.utc)
+        lines.append(f"🕐 {utc.strftime('%Y-%m-%d %H:%M')} UTC")
+    lines.append("")
+    lines.append(f"<b>Имя:</b> {_telegram_escape(name)}")
+    lines.append(f"<b>Контакт:</b> {_telegram_escape(contact)}")
+    msg = body or "—"
+    if len(msg) > 2800:
+        msg = msg[:2797] + "…"
+    lines.append(f"<b>Сообщение:</b> {_telegram_escape(msg)}")
+    ctx = context or {}
+    score = ctx.get("score")
+    rel = (ctx.get("relationType") or "").strip()
+    c1 = (ctx.get("city1") or "").strip()
+    c2 = (ctx.get("city2") or "").strip()
+    tz1 = (ctx.get("timezone1") or "").strip()
+    tz2 = (ctx.get("timezone2") or "").strip()
+    if score is not None or rel or c1 or c2 or tz1 or tz2:
+        lines.append("")
+        lines.append("<b>Контекст калькулятора:</b>")
+        if score is not None:
+            lines.append(f"• Балл совместимости: {_telegram_escape(str(score))}")
+        if rel:
+            lines.append(f"• Тип связи: {_telegram_escape(rel)}")
+        if c1 or c2:
+            lines.append(f"• Города: {_telegram_escape(c1 or '—')} / {_telegram_escape(c2 or '—')}")
+        if tz1 or tz2:
+            lines.append(f"• Часовые пояса: {_telegram_escape(tz1 or '—')} / {_telegram_escape(tz2 or '—')}")
+    text = "\n".join(lines)
+    if len(text) > 4090:
+        text = text[:4087] + "…"
+    return text
+
+
 @app.post("/api/compatibility")
 def compatibility() -> Any:
     payload = request.get_json(silent=True) or {}
@@ -612,18 +728,30 @@ def compatibility() -> Any:
 def notify_telegram(lead: Lead) -> None:
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
         return
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    text = (
-        "Новая заявка на экспертный разбор\n"
-        f"Имя: {lead.name}\n"
-        f"Контакт: {lead.contact}\n"
-        f"Сообщение: {lead.message or '-'}"
+    text = format_lead_telegram_message(
+        lead.name,
+        lead.contact,
+        lead.message or "",
+        lead.context if isinstance(lead.context, dict) else {},
+        lead_id=lead.id,
+        at=lead.created_at,
     )
-    try:
-        resp = requests.post(url, json={"chat_id": TELEGRAM_CHAT_ID, "text": text}, timeout=8)
-        print(f"Telegram notification sent: {resp.status_code}")
-    except Exception as e:
-        print(f"Telegram error: {e}")
+    payload = {
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text": text,
+        "parse_mode": "HTML",
+        "disable_web_page_preview": True,
+    }
+    ok, err = telegram_api_send(payload)
+    if ok:
+        print("Telegram: уведомление о заявке отправлено")
+        return
+    print(
+        "Telegram недоступен (сеть/VPN/блокировка). "
+        "Заявка сохранена в базе; см. /leads. Ошибка: "
+        + err[:300]
+    )
+    append_telegram_failure_backup(lead, err)
 
 
 def notify_crm_webhook(payload: dict[str, Any]) -> None:
@@ -660,10 +788,7 @@ def leads() -> Any:
         "message": lead.message,
         "context": lead.context,
     }
-    try:
-        notify_telegram(lead)
-    except Exception:
-        pass
+    notify_telegram(lead)
     try:
         notify_crm_webhook(outbound_payload)
     except Exception:
@@ -707,6 +832,11 @@ def leads_page() -> Any:
 </head>
 <body>
     <h1>Заявки на экспертный разбор</h1>
+    <p class="empty" style="margin-bottom: 16px;">
+        Все заявки хранятся здесь и в базе данных на сервере, даже если уведомление в Telegram не дошло
+        (нет интернета, VPN или блокировка api.telegram.org). При сбое Telegram дубликат пишется в файл
+        <code>backend/telegram_failed_leads.jsonl</code>.
+    </p>
     <div id="leads"></div>
     <script>
         fetch('/api/leads').then(r=>r.json()).then(d=>{
@@ -776,12 +906,9 @@ def chat() -> Any:
     if session_id not in chat_history:
         chat_history[session_id] = []
         if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
-            url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-            text = f"💬 Новый вопрос эксперту:\n{message[:200]}"
-            try:
-                requests.post(url, json={"chat_id": TELEGRAM_CHAT_ID, "text": text}, timeout=5)
-            except Exception:
-                pass
+            telegram_api_send(
+                {"chat_id": TELEGRAM_CHAT_ID, "text": f"💬 Новый вопрос эксперту:\n{message[:200]}"}
+            )
 
     user_msg = {"role": "user", "content": message}
     chat_history[session_id].append(user_msg)
