@@ -19,8 +19,26 @@ load_dotenv()
 
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "").strip()
 DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com").strip()
+# Меньше max_tokens и короче история — быстрее ответ API (меньше генерируемого текста).
+def _int_env(name: str, default: int, lo: int, hi: int) -> int:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return max(lo, min(hi, int(raw)))
+    except ValueError:
+        return default
+
+
+DEEPSEEK_CHAT_MAX_TOKENS = _int_env("DEEPSEEK_CHAT_MAX_TOKENS", 400, 120, 800)
+DEEPSEEK_CHAT_HISTORY_MSGS = _int_env("DEEPSEEK_CHAT_HISTORY_MSGS", 12, 4, 24)
 
 SYSTEM_PROMPT = """Ты — опытный эксперт-коуч по отношениям с 15-летним стажем. Ты помогаешь людям разобраться в их отношениях, даёшь мудрые и тёплые советы. Твой стиль общения — как опытный друг, который искренне заботится. Ты используешь нумерологию и астрологию как инструменты самопознания, но фокусируешься на психологии отношений и практических советах. Отвечай на русском языке, будто ты живой человек — не как робот. Будь конкретным, задавай уточняющие вопросы. Избегай общих фраз типа "всё будет хорошо"."""
+
+CHAT_SYSTEM_SUFFIX = (
+    "Формат: кратко — до 3–5 абзацев или маркированный список, суммарно примерно до 900 символов. "
+    "Без длинных вступлений и без повторения уже сказанного. Один уточняющий вопрос в конце — по желанию."
+)
 
 chat_history: dict[str, list[dict[str, str]]] = {}
 
@@ -369,6 +387,29 @@ def aspect_score(venus_aspect: tuple[str, float], mars_aspect: tuple[str, float]
     return base + v + m + moon
 
 
+def extended_synastry_bonus(
+    mercury_a: tuple[str, float],
+    jupiter_a: tuple[str, float],
+    saturn_a: tuple[str, float],
+) -> int:
+    """Дополнительный вклад Меркурия, Юпитера и Сатурна (мягче личных планет)."""
+
+    def pts(asp: tuple[str, float]) -> int:
+        weights = {
+            "trine": 5,
+            "sextile": 4,
+            "conjunction": 4,
+            "opposition": 2,
+            "square": 2,
+            "neutral": 3,
+        }
+        base = weights.get(asp[0], 3)
+        return max(0, base - int(asp[1] // 5))
+
+    total = pts(mercury_a) + pts(jupiter_a) + pts(saturn_a)
+    return min(24, total)
+
+
 def aspect_text(name: str) -> str:
     labels = {
         "conjunction": "соединение",
@@ -471,15 +512,20 @@ def relationship_flags(
     moon_aspect: tuple[str, float],
     life1: int,
     life2: int,
+    mercury_aspect: tuple[str, float],
+    jupiter_aspect: tuple[str, float],
+    saturn_aspect: tuple[str, float],
 ) -> dict[str, list[str]]:
     green_flags = [
         f"Стихии {sun_elem1}/{sun_elem2}: {element_relation_text(sun_elem1, sun_elem2).lower()}",
         f"Лунный аспект ({aspect_text(moon_aspect[0])}, орб {round(moon_aspect[1], 1)}°) поддерживает эмоциональное понимание.",
+        f"Меркурий в синастрии ({aspect_text(mercury_aspect[0])}, орб {round(mercury_aspect[1], 1)}°) задаёт тон диалогу и договорённостям.",
         f"ЧЖП {life1} и {life2}: есть потенциал договоренностей через осознанный диалог.",
     ]
     red_flags = [
         f"Аспект Марса ({aspect_text(mars_aspect[0])}, орб {round(mars_aspect[1], 1)}°) может усиливать резкость в спорах.",
         f"Аспект Венеры ({aspect_text(venus_aspect[0])}, орб {round(venus_aspect[1], 1)}°) требует внимания к ожиданиям и проявлению чувств.",
+        f"Юпитер ({aspect_text(jupiter_aspect[0])}) и Сатурн ({aspect_text(saturn_aspect[0])}) задают масштаб и границы союза — полезно обсуждать цели и ответственность явно.",
         "При стрессе возможен разный темп решений, важно заранее согласовать правила обсуждения конфликтов.",
     ]
     return {"green": green_flags, "red": red_flags}
@@ -490,16 +536,22 @@ def area_scores(
     venus_aspect: tuple[str, float],
     mars_aspect: tuple[str, float],
     moon_aspect: tuple[str, float],
+    mercury_aspect: tuple[str, float],
+    jupiter_aspect: tuple[str, float],
+    saturn_aspect: tuple[str, float],
 ) -> dict[str, int]:
     sex_bonus = 5 if mars_aspect[0] in {"trine", "sextile", "conjunction"} else -3
     life_bonus = 4 if moon_aspect[0] in {"trine", "sextile", "conjunction"} else 0
     money_bonus = 4 if venus_aspect[0] in {"trine", "sextile"} else -2
+    merc_bonus = 3 if mercury_aspect[0] in {"trine", "sextile", "conjunction"} else (-2 if mercury_aspect[0] in {"square", "opposition"} else 0)
+    goals_bonus = 3 if jupiter_aspect[0] in {"trine", "sextile", "conjunction"} else 0
+    goals_bonus += 2 if saturn_aspect[0] in {"trine", "sextile"} else (-2 if saturn_aspect[0] in {"square", "opposition"} else 0)
     return {
         "быт": max(35, min(100, int((vector["stability"] + vector["communication"]) / 2 + life_bonus))),
         "секс": max(35, min(100, int((vector["passion"] + vector["emotional"]) / 2 + sex_bonus))),
         "деньги": max(35, min(100, int((vector["stability"] + vector["communication"]) / 2 + money_bonus))),
-        "коммуникация": vector["communication"],
-        "цели": max(35, min(100, int((vector["stability"] + vector["communication"]) / 2 + 2))),
+        "коммуникация": max(35, min(100, vector["communication"] + merc_bonus)),
+        "цели": max(35, min(100, int((vector["stability"] + vector["communication"]) / 2 + 2 + goals_bonus))),
     }
 
 
@@ -531,6 +583,12 @@ def build_compatibility(payload: dict[str, Any]) -> dict[str, Any]:
     venus2 = planet_longitude(date2, swe.VENUS)
     mars1 = planet_longitude(date1, swe.MARS)
     mars2 = planet_longitude(date2, swe.MARS)
+    mercury1 = planet_longitude(date1, swe.MERCURY)
+    mercury2 = planet_longitude(date2, swe.MERCURY)
+    jupiter1 = planet_longitude(date1, swe.JUPITER)
+    jupiter2 = planet_longitude(date2, swe.JUPITER)
+    saturn1 = planet_longitude(date1, swe.SATURN)
+    saturn2 = planet_longitude(date2, swe.SATURN)
 
     sun_sign1, sun_elem1 = zodiac_from_longitude(sun1)
     sun_sign2, sun_elem2 = zodiac_from_longitude(sun2)
@@ -547,6 +605,11 @@ def build_compatibility(payload: dict[str, Any]) -> dict[str, Any]:
     venus_aspect = nearest_aspect(venus1, venus2)
     mars_aspect = nearest_aspect(mars1, mars2)
     moon_aspect = nearest_aspect(moon1, moon2)
+    mercury_aspect = nearest_aspect(mercury1, mercury2)
+    jupiter_aspect = nearest_aspect(jupiter1, jupiter2)
+    saturn_aspect = nearest_aspect(saturn1, saturn2)
+
+    syn_extra = extended_synastry_bonus(mercury_aspect, jupiter_aspect, saturn_aspect)
 
     total_score = (
         profile["base"]
@@ -554,20 +617,59 @@ def build_compatibility(payload: dict[str, Any]) -> dict[str, Any]:
         + score_by_numerology(life1, life2)
         + score_by_chinese(chinese1, chinese2)
         + aspect_score(venus_aspect, mars_aspect, moon_aspect)
+        + syn_extra
     )
     total_score = max(30, min(100, total_score))
     current_year = datetime.now(timezone.utc).year
     pyear1 = personal_year(date1, current_year)
     pyear2 = personal_year(date2, current_year)
 
+    harmonious = {"trine", "sextile", "conjunction"}
+    tense = {"square", "opposition"}
+    merc_comm_adj = (
+        10
+        if mercury_aspect[0] in harmonious
+        else (-8 if mercury_aspect[0] in tense else 2)
+    )
+    merc_comm_adj -= int(mercury_aspect[1] // 6)
+    stab_adj = (5 if jupiter_aspect[0] in harmonious else -2 if jupiter_aspect[0] in tense else 0) + (
+        4 if saturn_aspect[0] in harmonious else -4 if saturn_aspect[0] in tense else 1
+    )
+    stab_adj -= int((jupiter_aspect[1] + saturn_aspect[1]) // 12)
+
     compatibility_vector = {
         "emotional": max(35, min(100, 55 + (12 - int(moon_aspect[1])) * 3)),
-        "communication": max(35, min(100, 50 + score_by_elements(sun_elem1, sun_elem2) * 2)),
+        "communication": max(
+            35,
+            min(100, 50 + score_by_elements(sun_elem1, sun_elem2) * 2 + merc_comm_adj),
+        ),
         "passion": max(35, min(100, 52 + (12 - int(mars_aspect[1])) * 3)),
-        "stability": max(35, min(100, 48 + score_by_numerology(life1, life2) * 2)),
+        "stability": max(
+            35,
+            min(100, 48 + score_by_numerology(life1, life2) * 2 + stab_adj),
+        ),
     }
-    pair_flags = relationship_flags(sun_elem1, sun_elem2, venus_aspect, mars_aspect, moon_aspect, life1, life2)
-    areas = area_scores(compatibility_vector, venus_aspect, mars_aspect, moon_aspect)
+    pair_flags = relationship_flags(
+        sun_elem1,
+        sun_elem2,
+        venus_aspect,
+        mars_aspect,
+        moon_aspect,
+        life1,
+        life2,
+        mercury_aspect,
+        jupiter_aspect,
+        saturn_aspect,
+    )
+    areas = area_scores(
+        compatibility_vector,
+        venus_aspect,
+        mars_aspect,
+        moon_aspect,
+        mercury_aspect,
+        jupiter_aspect,
+        saturn_aspect,
+    )
     best_days, energy_trend = best_days_for_pair(venus1, venus2, moon_aspect[1])
 
     return {
@@ -580,6 +682,9 @@ def build_compatibility(payload: dict[str, Any]) -> dict[str, Any]:
             "element2": sun_elem2,
             "venusAspect": aspect_text(venus_aspect[0]),
             "marsAspect": aspect_text(mars_aspect[0]),
+            "mercuryAspect": aspect_text(mercury_aspect[0]),
+            "jupiterAspect": aspect_text(jupiter_aspect[0]),
+            "saturnAspect": aspect_text(saturn_aspect[0]),
             "elementDynamics": element_relation_text(sun_elem1, sun_elem2),
         },
         "chinese": {
@@ -620,20 +725,29 @@ def build_compatibility(payload: dict[str, Any]) -> dict[str, Any]:
                 "first": {
                     "sun": round(sun1, 2),
                     "moon": round(moon1, 2),
+                    "mercury": round(mercury1, 2),
                     "venus": round(venus1, 2),
                     "mars": round(mars1, 2),
+                    "jupiter": round(jupiter1, 2),
+                    "saturn": round(saturn1, 2),
                 },
                 "second": {
                     "sun": round(sun2, 2),
                     "moon": round(moon2, 2),
+                    "mercury": round(mercury2, 2),
                     "venus": round(venus2, 2),
                     "mars": round(mars2, 2),
+                    "jupiter": round(jupiter2, 2),
+                    "saturn": round(saturn2, 2),
                 },
             },
             "aspects": {
                 "venus": {"name": aspect_text(venus_aspect[0]), "orb": round(venus_aspect[1], 2)},
                 "mars": {"name": aspect_text(mars_aspect[0]), "orb": round(mars_aspect[1], 2)},
                 "moon": {"name": aspect_text(moon_aspect[0]), "orb": round(moon_aspect[1], 2)},
+                "mercury": {"name": aspect_text(mercury_aspect[0]), "orb": round(mercury_aspect[1], 2)},
+                "jupiter": {"name": aspect_text(jupiter_aspect[0]), "orb": round(jupiter_aspect[1], 2)},
+                "saturn": {"name": aspect_text(saturn_aspect[0]), "orb": round(saturn_aspect[1], 2)},
             },
             "compatibilityVector": {
                 "emotional": compatibility_vector["emotional"],
@@ -821,37 +935,57 @@ def leads_page() -> Any:
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Заявки</title>
-    <style>
-        body { font-family: sans-serif; padding: 20px; background: #1a162e; color: #e8e4f5; }
-        h1 { color: #a78bfa; }
-        .lead { background: #2a2040; padding: 16px; margin: 10px 0; border-radius: 10px; }
-        .lead strong { color: #a78bfa; }
-        .empty { color: #9a94b8; font-style: italic; }
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Заявки — экспертный разбор</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/styles.css" />
 </head>
-<body>
-    <h1>Заявки на экспертный разбор</h1>
-    <p class="empty" style="margin-bottom: 16px;">
-        Все заявки хранятся здесь и в базе данных на сервере, даже если уведомление в Telegram не дошло
-        (нет интернета, VPN или блокировка api.telegram.org). При сбое Telegram дубликат пишется в файл
-        <code>backend/telegram_failed_leads.jsonl</code>.
-    </p>
-    <div id="leads"></div>
-    <script>
-        fetch('/api/leads').then(r=>r.json()).then(d=>{
-            const div = document.getElementById('leads');
-            if(!d.items.length) { div.innerHTML = '<p class="empty">Заявок пока нет</p>'; return; }
-            div.innerHTML = d.items.map(l=>`
-                <div class="lead">
-                    <strong>#${l.id}</strong> ${l.created_at}<br>
-                    <strong>Имя:</strong> ${l.name}<br>
-                    <strong>Контакт:</strong> ${l.contact}<br>
-                    <strong>Сообщение:</strong> ${l.message || '—'}
-                </div>
-            `).join('');
-        });
-    </script>
+<body class="mystic-body">
+<div class="decor-stars mystic-stars-static" aria-hidden="true"></div>
+<div class="decor-moon" aria-hidden="true"></div>
+<main class="page inner-page leads-shell">
+    <header class="inner-page-header card">
+        <nav class="nav-row">
+            <a class="nav-back" href="/index.html">← На калькулятор</a>
+            <button type="button" class="btn secondary btn-compact" id="leadThemeToggle" aria-label="Сменить тему">Тема</button>
+        </nav>
+        <p class="tag">CRM</p>
+        <h1 class="page-title">Заявки на экспертный разбор</h1>
+        <p class="subtitle prose-intro leads-intro">
+            Все заявки хранятся здесь и в базе данных на сервере, даже если уведомление в Telegram не дошло.
+            При сбое Telegram дубликат может писаться в файл <code>backend/telegram_failed_leads.jsonl</code>.
+        </p>
+    </header>
+    <section class="card content-section">
+        <div id="leads"></div>
+    </section>
+</main>
+<script>
+(function(){
+var saved = localStorage.getItem('compat-theme');
+var light = window.matchMedia('(prefers-color-scheme: light)').matches;
+document.documentElement.setAttribute('data-theme', saved || (light ? 'light' : 'dark'));
+document.getElementById('leadThemeToggle').addEventListener('click', function(){
+var cur = document.documentElement.getAttribute('data-theme')||'dark';
+var next = cur === 'dark' ? 'light' : 'dark';
+document.documentElement.setAttribute('data-theme', next);
+localStorage.setItem('compat-theme', next);
+});
+})();
+fetch('/api/leads').then(function(r){ return r.json(); }).then(function(d){
+var div = document.getElementById('leads');
+if(!d.items||!d.items.length){ div.innerHTML = '<p class="leads-empty">Заявок пока нет</p>'; return; }
+div.innerHTML = d.items.map(function(l){ return `
+<div class="lead-card"><strong>#${l.id}</strong> · ${l.created_at}<br>
+<strong>Имя:</strong> ${escapeHtml(l.name)}<br>
+<strong>Контакт:</strong> ${escapeHtml(l.contact)}<br>
+<strong>Сообщение:</strong> ${escapeHtml(l.message||'—')}
+</div>`; }).join('');
+}).catch(function(){ document.getElementById('leads').innerHTML='<p class="leads-empty">Не удалось загрузить заявки</p>'; });
+function escapeHtml(s){ var d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+</script>
 </body>
 </html>"""
 
@@ -860,9 +994,10 @@ def call_deepseek(messages: list[dict[str, str]], session_id: str) -> str:
     if not DEEPSEEK_API_KEY:
         return "Извините, чат временно недоступен. Оставьте заявку на персональный разбор."
 
-    all_messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    system_full = f"{SYSTEM_PROMPT}\n\n{CHAT_SYSTEM_SUFFIX}"
+    all_messages: list[dict[str, str]] = [{"role": "system", "content": system_full}]
     stored = chat_history.get(session_id, [])
-    for msg in stored[-10:]:
+    for msg in stored[-DEEPSEEK_CHAT_HISTORY_MSGS:]:
         all_messages.append(msg)
     for msg in messages:
         all_messages.append(msg)
@@ -878,10 +1013,11 @@ def call_deepseek(messages: list[dict[str, str]], session_id: str) -> str:
             json={
                 "model": "deepseek-chat",
                 "messages": all_messages,
-                "temperature": 0.7,
-                "max_tokens": 600,
+                "temperature": 0.65,
+                "max_tokens": DEEPSEEK_CHAT_MAX_TOKENS,
+                "top_p": 0.9,
             },
-            timeout=30,
+            timeout=45,
         )
         print(f"DeepSeek response status: {resp.status_code}")
         if resp.status_code != 200:
