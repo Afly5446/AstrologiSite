@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs>
+    <linearGradient id="sky" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0c0722"/>
+      <stop offset="55%" stop-color="#160d35"/>
+      <stop offset="100%" stop-color="#341047"/>
+    </linearGradient>
+    <linearGradient id="orbit" x1="0%" y1="30%" x2="100%" y2="70%">
+      <stop offset="0%" stop-color="#ddd6fe"/>
+      <stop offset="45%" stop-color="#f472b6"/>
+      <stop offset="100%" stop-color="#a78bfa"/>
+    </linearGradient>
+    <radialGradient id="nebula" cx="28%" cy="22%" r="55%">
+      <stop offset="0%" stop-color="rgba(244,114,182,0.35)"/>
+      <stop offset="100%" stop-color="transparent"/>
+    </radialGradient>
+  </defs>
+  <rect width="32" height="32" rx="8" fill="url(#sky)"/>
+  <circle cx="9" cy="10" r="8" fill="url(#nebula)"/>
+  <!-- ??? ????????? ?????? — «?????????» ???? ????, ?? ????????? ???????? -->
+  <g fill="none" stroke-linecap="round">
+    <ellipse
+      cx="14"
+      cy="16"
+      rx="11"
+      ry="9"
+      transform="rotate(-32 14 16)"
+      stroke="url(#orbit)"
+      stroke-width="2.6"
+    />
+    <ellipse
+      cx="18"
+      cy="16"
+      rx="11"
+      ry="9"
+      transform="rotate(32 18 16)"
+      stroke="url(#orbit)"
+      stroke-width="2.6"
+      opacity="0.92"
+    />
+  </g>
+  <circle cx="11" cy="12" r="1.2" fill="#fefce8"/>
+  <circle cx="22" cy="20" r="1.1" fill="#fce7f3"/>
+  <path fill="#fde68a" d="M25 6.5l.35.95h1l-.8.6.3.95-.85-.62-.85.62.3-.95-.8-.6h1z"/>
+</svg>
