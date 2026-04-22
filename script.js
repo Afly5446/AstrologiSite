@@ -134,22 +134,26 @@ function expandMinimalCompatibilityResult(r) {
   };
 }
 
+/** Поля формы в query string; остальные параметры URL сохраняются при «Поделиться» и replaceState. */
+const COMPAT_FORM_QUERY_KEYS = [
+  "name1",
+  "name2",
+  "birth1",
+  "birth2",
+  "birthTime1",
+  "birthTime2",
+  "city1",
+  "city2",
+  "timezone1",
+  "timezone2",
+  "relationshipType",
+];
+
+const COMPAT_FORM_QUERY_KEY_SET = new Set(COMPAT_FORM_QUERY_KEYS);
+
 function buildFormQueryString() {
   const params = new URLSearchParams();
-  const keys = [
-    "name1",
-    "name2",
-    "birth1",
-    "birth2",
-    "birthTime1",
-    "birthTime2",
-    "city1",
-    "city2",
-    "timezone1",
-    "timezone2",
-    "relationshipType",
-  ];
-  keys.forEach((id) => {
+  COMPAT_FORM_QUERY_KEYS.forEach((id) => {
     const el = document.getElementById(id);
     if (!el) return;
     const v = el.value != null ? String(el.value).trim() : "";
@@ -159,20 +163,7 @@ function buildFormQueryString() {
 }
 
 function applyQueryToForm(params) {
-  const keys = [
-    "name1",
-    "name2",
-    "birth1",
-    "birth2",
-    "birthTime1",
-    "birthTime2",
-    "city1",
-    "city2",
-    "timezone1",
-    "timezone2",
-    "relationshipType",
-  ];
-  keys.forEach((id) => {
+  COMPAT_FORM_QUERY_KEYS.forEach((id) => {
     const el = document.getElementById(id);
     if (!el || !params.has(id)) return;
     el.value = params.get(id);
@@ -180,8 +171,15 @@ function applyQueryToForm(params) {
 }
 
 function getShareUrlWithParams() {
-  const q = buildFormQueryString();
+  const params = new URLSearchParams(buildFormQueryString());
+  const fromUrl = new URLSearchParams(window.location.search);
+  for (const [key, value] of fromUrl.entries()) {
+    if (!COMPAT_FORM_QUERY_KEY_SET.has(key)) {
+      params.set(key, value);
+    }
+  }
   const base = `${window.location.origin}${window.location.pathname}`;
+  const q = params.toString();
   return q ? `${base}?${q}` : base;
 }
 
