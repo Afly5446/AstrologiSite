@@ -1190,6 +1190,10 @@ li {
   overflow: hidden;
 }
 
+.chat-panel.hidden {
+  display: none !important;
+}
+
 .chat-header {
   display: flex;
   align-items: center;

@@ -630,19 +630,19 @@ function initChat() {
   }
 }
 
-if (chatToggle) {
+if (chatToggle && chatPanel) {
   chatToggle.onclick = function() {
-    chatPanel.style.display = "flex";
+    chatPanel.classList.remove("hidden");
     chatToggle.style.display = "none";
     chatInput.focus();
     initChat();
   };
 }
 
-if (chatClose) {
+if (chatClose && chatPanel && chatToggle) {
   chatClose.onclick = function() {
-    chatPanel.style.display = "none";
-    chatToggle.style.display = "flex";
+    chatPanel.classList.add("hidden");
+    chatToggle.style.display = "";
   };
 }
 
