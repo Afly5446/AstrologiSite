@@ -59,6 +59,24 @@ const ZODIAC_SIGN_SLUG = {
   Рыбы: "ryby",
 };
 
+const VALID_SIGN_SLUG_SET = new Set(Object.values(ZODIAC_SIGN_SLUG));
+
+/** Даты середины знака (полдень в TZ формы → совпадает с логикой API): подстановка из хэша #sovmestimost/… */
+const SLUG_SAMPLE_BIRTH = {
+  oven: "2000-04-10",
+  telets: "2000-05-10",
+  bliznecy: "2000-06-10",
+  rak: "2000-07-10",
+  lev: "2000-08-10",
+  deva: "2000-09-10",
+  vesy: "2000-10-10",
+  skorpion: "2000-11-10",
+  strelec: "2000-12-10",
+  kozerog: "2000-01-10",
+  vodoley: "2000-02-10",
+  ryby: "2000-03-10",
+};
+
 const RELATIONSHIP_LOCATIVE = {
   romance: "любви",
   friendship: "дружбе",
@@ -355,6 +373,43 @@ function signRuToSlug(signName) {
 function buildCompatHash(slug1, slug2) {
   if (!slug1 || !slug2) return "";
   return `#sovmestimost/${slug1}-i-${slug2}`;
+}
+
+function parseCompatHash(hash) {
+  if (!hash || typeof hash !== "string" || !hash.startsWith("#sovmestimost/")) return null;
+  const path = hash.slice("#sovmestimost/".length).split("?")[0];
+  const sep = "-i-";
+  const j = path.indexOf(sep);
+  if (j === -1) return null;
+  const slug1 = path.slice(0, j);
+  const slug2 = path.slice(j + sep.length);
+  if (!slug1 || !slug2) return null;
+  if (!VALID_SIGN_SLUG_SET.has(slug1) || !VALID_SIGN_SLUG_SET.has(slug2)) return null;
+  return { slug1, slug2 };
+}
+
+function applyHashPairToForm(slug1, slug2) {
+  const b1 = document.getElementById("birth1");
+  const b2 = document.getElementById("birth2");
+  if (!b1 || !b2) return;
+  const d1 = SLUG_SAMPLE_BIRTH[slug1];
+  const d2 = SLUG_SAMPLE_BIRTH[slug2];
+  if (!d1 || !d2) return;
+  b1.value = d1;
+  b2.value = d2;
+}
+
+/** Подставить даты под пару из хэша и отправить форму (как клик «Рассчитать»). */
+function runCompatFromHashRoute() {
+  if (!compatibilityForm) return;
+  const parsed = parseCompatHash(window.location.hash);
+  if (!parsed) return;
+  applyHashPairToForm(parsed.slug1, parsed.slug2);
+  if (typeof compatibilityForm.requestSubmit === "function") {
+    compatibilityForm.requestSubmit();
+  } else {
+    compatibilityForm.dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }));
+  }
 }
 
 function buildSharePathQueryHash() {
@@ -1000,7 +1055,11 @@ if (toggleSeoBtn) {
 }
 
 window.addEventListener("hashchange", () => {
-  if (!window.location.hash.startsWith("#sovmestimost")) return;
+  if (!window.location.hash.startsWith("#sovmestimost/")) return;
+  if (parseCompatHash(window.location.hash)) {
+    runCompatFromHashRoute();
+    return;
+  }
   const rs = document.getElementById("resultSection");
   if (rs && !rs.classList.contains("hidden")) {
     rs.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1011,12 +1070,17 @@ window.addEventListener("hashchange", () => {
   const params = new URLSearchParams(window.location.search);
   // Параметры _ym* добавляет Метрика (проверка счётчика, отладка). Автоотправка формы даёт replaceState и лишнюю нагрузку до загрузки tag.js.
   if ([...params.keys()].some((k) => k.startsWith("_ym"))) return;
-  if (!params.has("birth1") || !params.has("birth2")) return;
-  applyQueryToForm(params);
-  if (typeof compatibilityForm.requestSubmit === "function") {
-    compatibilityForm.requestSubmit();
-  } else {
-    compatibilityForm.dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }));
+  if (params.has("birth1") && params.has("birth2")) {
+    applyQueryToForm(params);
+    if (typeof compatibilityForm.requestSubmit === "function") {
+      compatibilityForm.requestSubmit();
+    } else {
+      compatibilityForm.dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }));
+    }
+    return;
+  }
+  if (window.location.hash.startsWith("#sovmestimost/")) {
+    runCompatFromHashRoute();
   }
 })();
 
