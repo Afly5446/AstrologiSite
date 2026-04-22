@@ -4,10 +4,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="preconnect" href="https://mc.yandex.ru" />
-    <title>Калькулятор совместимости по дате рождения — астрология и нумерология</title>
+    <title id="dynamic-title">Калькулятор совместимости по дате рождения | MagicLove</title>
     <meta
+      id="dynamic-desc"
       name="description"
-      content="Бесплатный расчёт совместимости пары: Swiss Ephemeris, аспекты планет, нумерология и китайский гороскоп. Совместимость по дате рождения онлайн."
+      content="Узнайте совместимость в любви и браке. Бесплатный расчёт по знакам зодиака, нумерологии и китайскому гороскопу."
     />
     <meta name="keywords" content="совместимость по дате рождения, синастрия онлайн, калькулятор совместимости, гороскоп совместимости, астрология пары" />
     <link rel="canonical" href="./index.html" />
@@ -358,6 +359,16 @@
             Полный разбор у эксперта (заявка)
           </button>
         </div>
+        <div id="seo-text-block" class="seo-text-block hidden" aria-live="polite">
+          <h3 class="seo-text-block__title">Совместимость знаков: <span id="seo-h3-signs"></span></h3>
+          <div id="seo-text-collapsible" class="seo-text-collapsible">
+            <p id="seo-text-content" class="seo-text-content"></p>
+          </div>
+          <button type="button" id="toggle-seo-text" class="seo-text-toggle" aria-expanded="false">
+            Читать подробнее <span class="seo-text-toggle__icon" aria-hidden="true">▼</span>
+          </button>
+        </div>
+
         <p class="freemium-hint">
           Расчёт и карточка результата — бесплатно. Чат с экспертом на сайте — тоже без оплаты: можно уточнить сомнения
           и не уходить с пустыми руками. Углублённый разбор «под ключ» — по желанию, через заявку; PNG и печать для
@@ -444,6 +455,27 @@
         </form>
       </div>
     </main>
+
+    <footer class="seo-footer no-print" aria-label="Популярные расчёты совместимости">
+      <p class="seo-footer__label">Популярные расчёты</p>
+      <nav class="seo-footer__links">
+        <a href="#sovmestimost/oven-i-skorpion">Овен и Скорпион</a>
+        <a href="#sovmestimost/telets-i-rak">Телец и Рак</a>
+        <a href="#sovmestimost/bliznecy-i-vesy">Близнецы и Весы</a>
+        <a href="#sovmestimost/lev-i-strelec">Лев и Стрелец</a>
+        <a href="#sovmestimost/deva-i-kozerog">Дева и Козерог</a>
+        <a href="#sovmestimost/rak-i-ryby">Рак и Рыбы</a>
+        <a href="#sovmestimost/vesy-i-vodoley">Весы и Водолей</a>
+        <a href="#sovmestimost/skorpion-i-lev">Скорпион и Лев</a>
+        <a href="#sovmestimost/strelec-i-oven">Стрелец и Овен</a>
+        <a href="#sovmestimost/vodoley-i-bliznecy">Водолей и Близнецы</a>
+        <a href="#sovmestimost/ryby-i-deva">Рыбы и Дева</a>
+        <a href="#sovmestimost/kozerog-i-rak">Козерог и Рак</a>
+      </nav>
+      <p class="seo-footer__extra">
+        <a href="./methodology.html">Как мы считаем совместимость</a>
+      </p>
+    </footer>
 
     <script src="./script.js"></script>
   </body>

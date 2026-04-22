@@ -35,8 +35,228 @@ const themeToggle = document.getElementById("themeToggle");
 let chart;
 let trendChart;
 let latestResult;
+/** Хэш вида #sovmestimost/oven-i-skorpion — добавляется к URL после расчёта и в «Поделиться». */
+let compatibilityUrlHash = "";
 
 const GEO_SEARCH_URL = "https://geocoding-api.open-meteo.com/v1/search";
+
+const DEFAULT_PAGE_TITLE = "Калькулятор совместимости по дате рождения | MagicLove";
+const DEFAULT_PAGE_DESC =
+  "Узнайте совместимость в любви и браке. Бесплатный расчёт по знакам зодиака, нумерологии и китайскому гороскопу.";
+
+const ZODIAC_SIGN_SLUG = {
+  Овен: "oven",
+  Телец: "telets",
+  Близнецы: "bliznecy",
+  Рак: "rak",
+  Лев: "lev",
+  Дева: "deva",
+  Весы: "vesy",
+  Скорпион: "skorpion",
+  Стрелец: "strelec",
+  Козерог: "kozerog",
+  Водолей: "vodoley",
+  Рыбы: "ryby",
+};
+
+const RELATIONSHIP_LOCATIVE = {
+  romance: "любви",
+  friendship: "дружбе",
+  business: "бизнесе",
+};
+
+const seoTexts = {
+  "oven-skorpion": {
+    title: "Овен и Скорпион",
+    text: "Союз Овна и Скорпиона — встреча двух сильных энергий: огонь инициативы и глубина чувства. В романтике пара способна на страсть и взаимное притяжение, важно заранее договориться о границах и честности.",
+  },
+  "telets-rak": {
+    title: "Телец и Рак",
+    text: "Телец даёт Раку ощущение опоры и бытовой стабильности, Рак — теплоту и эмоциональную вовлечённость. Один из самых «домашних» и уютных тандемов при готовности обсуждать настроение и планы.",
+  },
+  "bliznecy-vesy": {
+    title: "Близнецы и Весы",
+    text: "Воздушная пара: лёгкость общения, юмор, интерес к людям и идеям. Риск — распыление; пара выигрывает, когда находит общие проекты и правила внимания друг к другу.",
+  },
+  "lev-strelec": {
+    title: "Лев и Стрелец",
+    text: "Два огня: вдохновение, щедрость, любовь к ярким впечатлениям. Вместе легко поднимать друг друга, сложнее — замедляться и бытовые мелочи; полезны совместные цели и уважение к отдыху партнёра.",
+  },
+  "deva-kozerog": {
+    title: "Дева и Козерог",
+    text: "Земля + земля: практичность, дисциплина, стремление к качеству. Союз крепнет через общие задачи и доверие; стоит следить, чтобы критичность не подменяла поддержку.",
+  },
+  "rak-ryby": {
+    title: "Рак и Рыбы",
+    text: "Водная чувствительность и эмпатия: глубокая эмоциональная слышимость. Важно не «тонуть» в переживаниях вдвоём и иногда выносить разговоры на нейтральную, спокойную волну.",
+  },
+  "vesy-vodoley": {
+    title: "Весы и Водолей",
+    text: "Воздух + воздух: идеи, социальность, поиск справедливости и свободы. Пара ценит автономию; близость крепнет через честные договорённости и совместные смыслы, а не только «красивую картинку».",
+  },
+  "lev-skorpion": {
+    title: "Лев и Скорпион",
+    text: "Сцена и глубина: яркость Льва и интенсивность Скорпиона усиливают друг друга. Нужны ясные правила ревности и власти, иначе страсть легко превращается в испытание.",
+  },
+  "oven-strelec": {
+    title: "Овен и Стрелец",
+    text: "Два огненных знака — драйв, авантюра, честность напрямую. Хорошо для совместных стартов; вызов — доводить начатое до конца и учитывать чувствительные моменты партнёра.",
+  },
+  "vodoley-bliznecy": {
+    title: "Водолей и Близнецы",
+    text: "Интеллект, новизна, свобода слова. Разговоры склеивают пару; для близости полезны ритуалы «мы вдвоём» и телесная простота, не только идеи.",
+  },
+  "ryby-deva": {
+    title: "Рыбы и Дева",
+    text: "Чувство и структура: Рыбы приносят мягкость и воображение, Дева — заботу о деталях. Работает, когда Дева не «чинит» эмоции Рыб, а помогает им приземляться с уважением.",
+  },
+  "kozerog-rak": {
+    title: "Козерог и Рак",
+    text: "Рак даёт тепло и заботу, Козерог — рамки и надёжность. Пара строит дом и традиции; важно называть потребности в безопасности вслух, а не только через намёки.",
+  },
+};
+
+function signRuToSlug(signName) {
+  const s = (signName || "").trim();
+  return ZODIAC_SIGN_SLUG[s] || null;
+}
+
+/** Ключ для seoTexts: два слага в лексикографическом порядке. */
+function seoSlugPairKey(slug1, slug2) {
+  if (!slug1 || !slug2) return "";
+  return slug1 < slug2 ? `${slug1}-${slug2}` : `${slug2}-${slug1}`;
+}
+
+function buildCompatHash(slug1, slug2) {
+  if (!slug1 || !slug2) return "";
+  return `#sovmestimost/${slug1}-i-${slug2}`;
+}
+
+function buildSharePathQueryHash() {
+  const params = new URLSearchParams(buildFormQueryString());
+  const fromUrl = new URLSearchParams(window.location.search);
+  for (const [key, value] of fromUrl.entries()) {
+    if (!COMPAT_FORM_QUERY_KEY_SET.has(key)) {
+      params.set(key, value);
+    }
+  }
+  const q = params.toString();
+  const pathQuery = q ? `${window.location.pathname}?${q}` : window.location.pathname;
+  return pathQuery + (compatibilityUrlHash || "");
+}
+
+function updateSEO(sign1, sign2, typeLocative) {
+  const titleEl = document.getElementById("dynamic-title");
+  const descEl = document.getElementById("dynamic-desc");
+  if (!titleEl || !descEl) return;
+  const t = `${sign1} и ${sign2}: совместимость в ${typeLocative} | MagicLove`;
+  const d = `Гороскоп совместимости: ${sign1} + ${sign2}. Анализ характеров, советы астролога и прогноз отношений. Рассчитайте бесплатно онлайн на MagicLove.`;
+  titleEl.textContent = t;
+  descEl.setAttribute("content", d);
+}
+
+function buildSchemaAnswerText(sign1, sign2, rating) {
+  if (rating >= 75) {
+    return `По расчёту калькулятора MagicLove совместимость ${sign1} и ${sign2} оценивается примерно в ${rating} из 100 баллов: сильный потенциал пары при готовности обоих поддерживать диалог и уважение.`;
+  }
+  if (rating >= 55) {
+    return `Совместимость ${sign1} и ${sign2} в расчёте — около ${rating} из 100: есть гармоничные зоны и темы для проработки; результат носит ознакомительный характер.`;
+  }
+  return `Расчёт показывает порядка ${rating} из 100 для пары ${sign1} и ${sign2}; это ориентир для размышлений, а не готовый прогноз судьбы.`;
+}
+
+function addSchemaMarkup(sign1, sign2, rating) {
+  const schema = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: [
+      {
+        "@type": "Question",
+        name: `Какая совместимость у пары ${sign1} и ${sign2}?`,
+        acceptedAnswer: {
+          "@type": "Answer",
+          text: buildSchemaAnswerText(sign1, sign2, rating),
+        },
+      },
+    ],
+  };
+  const oldScript = document.getElementById("json-ld-schema");
+  if (oldScript) oldScript.remove();
+  const script = document.createElement("script");
+  script.type = "application/ld+json";
+  script.id = "json-ld-schema";
+  script.text = JSON.stringify(schema);
+  document.head.appendChild(script);
+}
+
+function showSEOText(slugKey, sign1, sign2, fallbackText) {
+  const block = document.getElementById("seo-text-block");
+  const h3 = document.getElementById("seo-h3-signs");
+  const content = document.getElementById("seo-text-content");
+  const coll = document.getElementById("seo-text-collapsible");
+  const btn = document.getElementById("toggle-seo-text");
+  if (!block || !h3 || !content) return;
+  const data = slugKey ? seoTexts[slugKey] : null;
+  const titleLine = data ? data.title : `${sign1} и ${sign2}`;
+  const body = data ? data.text : fallbackText;
+  h3.textContent = titleLine;
+  content.textContent = body;
+  block.classList.remove("hidden");
+  if (coll) coll.classList.remove("seo-text-collapsible--expanded");
+  if (btn) {
+    btn.setAttribute("aria-expanded", "false");
+    const icon = btn.querySelector(".seo-text-toggle__icon");
+    if (icon) icon.textContent = "▼";
+  }
+}
+
+function resetSeoToDefaults() {
+  compatibilityUrlHash = "";
+  const titleEl = document.getElementById("dynamic-title");
+  const descEl = document.getElementById("dynamic-desc");
+  if (titleEl) titleEl.textContent = DEFAULT_PAGE_TITLE;
+  if (descEl) descEl.setAttribute("content", DEFAULT_PAGE_DESC);
+  const oldScript = document.getElementById("json-ld-schema");
+  if (oldScript) oldScript.remove();
+  const block = document.getElementById("seo-text-block");
+  if (block) {
+    block.classList.add("hidden");
+    const coll = document.getElementById("seo-text-collapsible");
+    if (coll) coll.classList.remove("seo-text-collapsible--expanded");
+    const btn = document.getElementById("toggle-seo-text");
+    if (btn) {
+      btn.setAttribute("aria-expanded", "false");
+      const icon = btn.querySelector(".seo-text-toggle__icon");
+      if (icon) icon.textContent = "▼";
+    }
+  }
+}
+
+function applyResultSeo(result) {
+  const sign1 = (result.western?.sign1 || "").trim();
+  const sign2 = (result.western?.sign2 || "").trim();
+  const slug1 = signRuToSlug(sign1);
+  const slug2 = signRuToSlug(sign2);
+  const relKey = document.getElementById("relationshipType")?.value || "romance";
+  const typeLoc = RELATIONSHIP_LOCATIVE[relKey] || RELATIONSHIP_LOCATIVE.romance;
+
+  if (sign1 && sign2 && sign1 !== "—" && sign2 !== "—") {
+    updateSEO(sign1, sign2, typeLoc);
+    addSchemaMarkup(sign1, sign2, Number(result.total) || 0);
+    const pairKey = seoSlugPairKey(slug1, slug2);
+    const fallback =
+      `${sign1} и ${sign2}: стихии ${result.western.element1} и ${result.western.element2}. ` +
+      `Балл совместимости в расчёте — ${result.total} из 100. Подробнее по аспектам, нумерологии и китайскому циклу — в блоках выше; ` +
+      `это развлекательный ориентир, а не медицинское или юридическое заключение.`;
+    showSEOText(pairKey, sign1, sign2, fallback);
+  } else {
+    resetSeoToDefaults();
+    const block = document.getElementById("seo-text-block");
+    if (block) block.classList.add("hidden");
+  }
+
+  compatibilityUrlHash = slug1 && slug2 ? buildCompatHash(slug1, slug2) : "";
+}
 
 function expandMinimalCompatibilityResult(r) {
   if (r.advanced?.aspects?.mercury) {
@@ -171,16 +391,7 @@ function applyQueryToForm(params) {
 }
 
 function getShareUrlWithParams() {
-  const params = new URLSearchParams(buildFormQueryString());
-  const fromUrl = new URLSearchParams(window.location.search);
-  for (const [key, value] of fromUrl.entries()) {
-    if (!COMPAT_FORM_QUERY_KEY_SET.has(key)) {
-      params.set(key, value);
-    }
-  }
-  const base = `${window.location.origin}${window.location.pathname}`;
-  const q = params.toString();
-  return q ? `${base}?${q}` : base;
+  return `${window.location.origin}${buildSharePathQueryHash()}`;
 }
 
 let geoTimer1;
@@ -347,6 +558,7 @@ function drawEnergyTrend(trend, bestDays = []) {
 }
 
 async function showLoading() {
+  resetSeoToDefaults();
   loaderSection.classList.remove("hidden");
   resultSection.classList.add("hidden");
   progressBar.style.width = "0%";
@@ -399,6 +611,7 @@ function renderResult(result, person1, person2) {
   funTip.textContent = result.insights.funTip;
 
   drawChart(result.total);
+  applyResultSeo(result);
   loaderSection.classList.add("hidden");
   resultSection.classList.remove("hidden");
 }
@@ -438,8 +651,7 @@ compatibilityForm.addEventListener("submit", async (event) => {
     latestResult = await requestCompatibility(payload);
     latestResult.shareNames = [payload.name1, payload.name2];
     renderResult(latestResult, payload.name1, payload.name2);
-    const shareUrl = getShareUrlWithParams();
-    window.history.replaceState({}, "", shareUrl || window.location.pathname);
+    window.history.replaceState({}, "", buildSharePathQueryHash());
     resultSection.scrollIntoView({ behavior: "smooth", block: "start" });
   } catch (error) {
     loaderSection.classList.add("hidden");
@@ -552,6 +764,26 @@ initTheme();
 
 setupGeoSuggest("city1", "geoSuggest1", "timezone1");
 setupGeoSuggest("city2", "geoSuggest2", "timezone2");
+
+const toggleSeoBtn = document.getElementById("toggle-seo-text");
+if (toggleSeoBtn) {
+  toggleSeoBtn.addEventListener("click", () => {
+    const coll = document.getElementById("seo-text-collapsible");
+    if (!coll) return;
+    const expanded = coll.classList.toggle("seo-text-collapsible--expanded");
+    toggleSeoBtn.setAttribute("aria-expanded", expanded ? "true" : "false");
+    const icon = toggleSeoBtn.querySelector(".seo-text-toggle__icon");
+    if (icon) icon.textContent = expanded ? "▲" : "▼";
+  });
+}
+
+window.addEventListener("hashchange", () => {
+  if (!window.location.hash.startsWith("#sovmestimost")) return;
+  const rs = document.getElementById("resultSection");
+  if (rs && !rs.classList.contains("hidden")) {
+    rs.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+});
 
 (() => {
   const params = new URLSearchParams(window.location.search);

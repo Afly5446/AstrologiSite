@@ -1445,3 +1445,98 @@ li {
   text-align: center;
   padding: 24px;
 }
+
+/* SEO: текст под результатом и футер перелинковки */
+.seo-text-block {
+  margin-top: clamp(20px, 3vw, 28px);
+  padding-top: clamp(16px, 2.5vw, 22px);
+  border-top: 1px solid var(--card-border);
+  text-align: start;
+}
+
+.seo-text-block__title {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 0 0 10px;
+  color: var(--text);
+}
+
+.seo-text-collapsible {
+  max-height: 4.6em;
+  overflow: hidden;
+  transition: max-height 0.35s ease;
+}
+
+.seo-text-collapsible.seo-text-collapsible--expanded {
+  max-height: 80rem;
+}
+
+.seo-text-content {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.seo-text-toggle {
+  margin-top: 12px;
+  padding: 0;
+  background: none;
+  border: none;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--violet);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.seo-text-toggle:hover {
+  color: var(--accent);
+}
+
+.seo-footer {
+  max-width: 1100px;
+  margin: clamp(28px, 4vw, 48px) auto clamp(24px, 4vw, 40px);
+  padding: 0 var(--space-page);
+  font-size: 13px;
+  color: var(--muted);
+  text-align: start;
+}
+
+.seo-footer__label {
+  margin: 0 0 10px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.seo-footer__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+}
+
+.seo-footer__links a {
+  color: var(--violet);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+}
+
+.seo-footer__links a:hover {
+  border-bottom-color: currentColor;
+}
+
+.seo-footer__extra {
+  margin: 14px 0 0;
+}
+
+.seo-footer__extra a {
+  color: var(--muted);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.seo-footer__extra a:hover {
+  color: var(--text);
+}
