@@ -1,0 +1,31 @@
+# Локально или на VPS: приложение + PostgreSQL (лиды не теряются при перезапуске контейнера).
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: compat
+      POSTGRES_PASSWORD: compat
+      POSTGRES_DB: compatibility
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U compat -d compatibility"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      PORT: "8000"
+      DATABASE_URL: postgresql+psycopg2://compat:compat@db:5432/compatibility
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:

@@ -24,6 +24,8 @@ const areasText = document.getElementById("areasText");
 const bestDaysList = document.getElementById("bestDaysList");
 const energyTrendChart = document.getElementById("energyTrendChart");
 const shareBtn = document.getElementById("shareBtn");
+const copyLinkBtn = document.getElementById("copyLinkBtn");
+const printPdfBtn = document.getElementById("printPdfBtn");
 const downloadPngBtn = document.getElementById("downloadPngBtn");
 const expertBtn = document.getElementById("expertBtn");
 const crmForm = document.getElementById("crmForm");
@@ -33,6 +35,220 @@ const themeToggle = document.getElementById("themeToggle");
 let chart;
 let trendChart;
 let latestResult;
+
+const GEO_SEARCH_URL = "https://geocoding-api.open-meteo.com/v1/search";
+
+function expandMinimalCompatibilityResult(r) {
+  if (r.advanced?.aspects?.mercury) {
+    return r;
+  }
+  const elDyn =
+    r.western?.element1 && r.western?.element2
+      ? `Стихии ${r.western.element1} и ${r.western.element2}: смотрите полный расчёт на сервере с Swiss Ephemeris.`
+      : "";
+  const place = {
+    moon1: "—",
+    moon2: "—",
+    moonAspect: "—",
+    ...r.bonus,
+  };
+  return {
+    ...r,
+    western: {
+      sign1: r.western?.sign1 || "—",
+      sign2: r.western?.sign2 || "—",
+      element1: r.western?.element1 || "",
+      element2: r.western?.element2 || "",
+      venusAspect: r.western?.venusAspect || "н/д",
+      marsAspect: r.western?.marsAspect || "н/д",
+      mercuryAspect: r.western?.mercuryAspect || "н/д",
+      jupiterAspect: r.western?.jupiterAspect || "н/д",
+      saturnAspect: r.western?.saturnAspect || "н/д",
+      elementDynamics: r.western?.elementDynamics || elDyn,
+    },
+    bonus: place,
+    birthMeta: r.birthMeta || {
+      city1: "",
+      city2: "",
+      timezone1: "UTC",
+      timezone2: "UTC",
+    },
+    numerology: {
+      lifePath1: r.numerology?.lifePath1 ?? 0,
+      lifePath2: r.numerology?.lifePath2 ?? 0,
+      destiny1: r.numerology?.destiny1,
+      destiny2: r.numerology?.destiny2,
+      personalYear1: r.numerology?.personalYear1 ?? "—",
+      personalYear2: r.numerology?.personalYear2 ?? "—",
+    },
+    advanced: {
+      chineseDynamics:
+        r.advanced?.chineseDynamics ||
+        "Полная китайская динамика доступна при расчёте на основном сервере.",
+      pairFlags: r.advanced?.pairFlags || {
+        green: ["Упрощённый режим CDN: укажите backend с полным API для деталей."],
+        red: [],
+      },
+      areaScores: r.advanced?.areaScores || {
+        быт: 50,
+        секс: 50,
+        деньги: 50,
+        коммуникация: 50,
+        цели: 50,
+      },
+      bestDays: r.advanced?.bestDays || [],
+      energyTrend: r.advanced?.energyTrend || [],
+      aspects: {
+        venus: { name: "н/д", orb: 0 },
+        mars: { name: "н/д", orb: 0 },
+        moon: { name: "н/д", orb: 0 },
+        mercury: { name: "н/д", orb: 0 },
+        jupiter: { name: "н/д", orb: 0 },
+        saturn: { name: "н/д", orb: 0 },
+        ...r.advanced?.aspects,
+      },
+      planetPositions: r.advanced?.planetPositions || {
+        first: {},
+        second: {},
+      },
+      compatibilityVector: r.advanced?.compatibilityVector || {
+        emotional: 50,
+        communication: 50,
+        passion: 50,
+        stability: 50,
+      },
+      timeline: r.advanced?.timeline || {
+        m3: "",
+        m6: "",
+        m12: "",
+      },
+    },
+    insights: {
+      strengths: r.insights?.strengths || [],
+      growth: r.insights?.growth || [],
+      weeklyAdvice: r.insights?.weeklyAdvice || "",
+      conflictTip: r.insights?.conflictTip || "",
+      forecastTip: r.insights?.forecastTip || "",
+      funTip: r.insights?.funTip || "",
+    },
+  };
+}
+
+function buildFormQueryString() {
+  const params = new URLSearchParams();
+  const keys = [
+    "name1",
+    "name2",
+    "birth1",
+    "birth2",
+    "birthTime1",
+    "birthTime2",
+    "city1",
+    "city2",
+    "timezone1",
+    "timezone2",
+    "relationshipType",
+  ];
+  keys.forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const v = el.value != null ? String(el.value).trim() : "";
+    if (v) params.set(id, v);
+  });
+  return params.toString();
+}
+
+function applyQueryToForm(params) {
+  const keys = [
+    "name1",
+    "name2",
+    "birth1",
+    "birth2",
+    "birthTime1",
+    "birthTime2",
+    "city1",
+    "city2",
+    "timezone1",
+    "timezone2",
+    "relationshipType",
+  ];
+  keys.forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el || !params.has(id)) return;
+    el.value = params.get(id);
+  });
+}
+
+function getShareUrlWithParams() {
+  const q = buildFormQueryString();
+  const base = `${window.location.origin}${window.location.pathname}`;
+  return q ? `${base}?${q}` : base;
+}
+
+let geoTimer1;
+let geoTimer2;
+
+function setupGeoSuggest(cityInputId, listId, tzInputId) {
+  const input = document.getElementById(cityInputId);
+  const list = document.getElementById(listId);
+  const tzInput = document.getElementById(tzInputId);
+  if (!input || !list || !tzInput) return;
+
+  const hide = () => {
+    list.classList.add("hidden");
+    list.innerHTML = "";
+  };
+
+  input.addEventListener("blur", () => {
+    setTimeout(hide, 200);
+  });
+
+  input.addEventListener("input", () => {
+    const timerRef = cityInputId === "city1" ? geoTimer1 : geoTimer2;
+    clearTimeout(timerRef);
+    const q = input.value.trim();
+    if (q.length < 2) {
+      hide();
+      return;
+    }
+    const run = async () => {
+      try {
+        const url = `${GEO_SEARCH_URL}?name=${encodeURIComponent(q)}&count=6&language=ru`;
+        const res = await fetch(url);
+        const data = await res.json();
+        const results = data.results || [];
+        list.innerHTML = "";
+        if (!results.length) {
+          hide();
+          return;
+        }
+        results.forEach((place) => {
+          const li = document.createElement("li");
+          const label = place.name + (place.admin1 ? `, ${place.admin1}` : "") + ` — ${place.country}`;
+          li.textContent = label;
+          li.setAttribute("role", "option");
+          li.addEventListener("mousedown", (e) => {
+            e.preventDefault();
+            input.value = place.name;
+            if (place.timezone) {
+              tzInput.value = place.timezone;
+            }
+            hide();
+          });
+          list.appendChild(li);
+        });
+        list.classList.remove("hidden");
+      } catch {
+        hide();
+      }
+    };
+    if (cityInputId === "city1") {
+      geoTimer1 = setTimeout(run, 280);
+    } else {
+      geoTimer2 = setTimeout(run, 280);
+    }
+  });
+}
 
 function setTheme(theme) {
   document.documentElement.setAttribute("data-theme", theme);
@@ -144,12 +360,13 @@ async function showLoading() {
 }
 
 function renderResult(result, person1, person2) {
+  result = expandMinimalCompatibilityResult(result);
   const title1 = person1 || "Вы";
   const title2 = person2 || "Партнер";
   resultTitle.textContent = `💕 Совместимость: ${result.total}/100`;
   resultSubtitle.textContent = `${title1} + ${title2} | ${result.relationProfile.label}`;
 
-  westernText.textContent = `${result.western.sign1} + ${result.western.sign2}: стихии ${result.western.element1} и ${result.western.element2}. Аспект Венеры: ${result.western.venusAspect}, аспект Марса: ${result.western.marsAspect}.`;
+  westernText.textContent = `${result.western.sign1} + ${result.western.sign2}: стихии ${result.western.element1} и ${result.western.element2}. Венера: ${result.western.venusAspect}, Марс: ${result.western.marsAspect}. Меркурий: ${result.western.mercuryAspect}, Юпитер: ${result.western.jupiterAspect}, Сатурн: ${result.western.saturnAspect}.`;
   chineseText.textContent = `${result.chinese.first.animal} (${result.chinese.first.element}) + ${result.chinese.second.animal} (${result.chinese.second.element}): ${result.advanced.chineseDynamics}`;
   numerologyText.textContent = `ЧЖП: ${result.numerology.lifePath1} + ${result.numerology.lifePath2}. ${
     result.numerology.destiny1 && result.numerology.destiny2
@@ -161,7 +378,7 @@ function renderResult(result, person1, person2) {
       ? ` Гео: ${result.birthMeta?.city1 || "не указано"} / ${result.birthMeta?.city2 || "не указано"}.`
       : "";
   bonusText.textContent = `Луна ${title1}: ${result.bonus.moon1}, Луна ${title2}: ${result.bonus.moon2}. Между ними: ${result.bonus.moonAspect}. Часовые пояса: ${result.birthMeta?.timezone1 || "UTC"} и ${result.birthMeta?.timezone2 || "UTC"}.${cityLine}`;
-  aspectsText.textContent = `Венера: ${result.advanced.aspects.venus.name} (орб ${result.advanced.aspects.venus.orb}°), Марс: ${result.advanced.aspects.mars.name} (орб ${result.advanced.aspects.mars.orb}°), Луна: ${result.advanced.aspects.moon.name} (орб ${result.advanced.aspects.moon.orb}°).`;
+  aspectsText.textContent = `Венера: ${result.advanced.aspects.venus.name} (${result.advanced.aspects.venus.orb}°), Марс: ${result.advanced.aspects.mars.name} (${result.advanced.aspects.mars.orb}°), Луна: ${result.advanced.aspects.moon.name} (${result.advanced.aspects.moon.orb}°). Меркурий: ${result.advanced.aspects.mercury.name} (${result.advanced.aspects.mercury.orb}°), Юпитер: ${result.advanced.aspects.jupiter.name} (${result.advanced.aspects.jupiter.orb}°), Сатурн: ${result.advanced.aspects.saturn.name} (${result.advanced.aspects.saturn.orb}°).`;
   vectorText.textContent = `Эмоции ${result.advanced.compatibilityVector.emotional}/100, Коммуникация ${result.advanced.compatibilityVector.communication}/100, Страсть ${result.advanced.compatibilityVector.passion}/100, Стабильность ${result.advanced.compatibilityVector.stability}/100.`;
   timelineText.textContent = `${result.advanced.timeline.m3} ${result.advanced.timeline.m6} ${result.advanced.timeline.m12}`;
   dynamicsText.textContent = `${result.western.elementDynamics} Позиции Солнца: ${result.advanced.planetPositions.first.sun}° / ${result.advanced.planetPositions.second.sun}°.`;
@@ -223,6 +440,8 @@ compatibilityForm.addEventListener("submit", async (event) => {
     latestResult = await requestCompatibility(payload);
     latestResult.shareNames = [payload.name1, payload.name2];
     renderResult(latestResult, payload.name1, payload.name2);
+    const shareUrl = getShareUrlWithParams();
+    window.history.replaceState({}, "", shareUrl || window.location.pathname);
     resultSection.scrollIntoView({ behavior: "smooth", block: "start" });
   } catch (error) {
     loaderSection.classList.add("hidden");
@@ -232,22 +451,42 @@ compatibilityForm.addEventListener("submit", async (event) => {
 
 shareBtn.addEventListener("click", async () => {
   if (!latestResult) return;
-  const shareText = `Наша совместимость: ${latestResult.total}/100. Реальный расчет по Swiss Ephemeris ✨`;
+  const shareUrl = getShareUrlWithParams();
+  const shareText = `Наша совместимость: ${latestResult.total}/100. Расчёт калькулятора ✨`;
   try {
     if (navigator.share) {
       await navigator.share({
         title: "Калькулятор совместимости",
         text: shareText,
-        url: window.location.href,
+        url: shareUrl,
       });
       return;
     }
-    await navigator.clipboard.writeText(`${shareText}\n${window.location.href}`);
-    alert("Ссылка и результат скопированы в буфер обмена.");
+    await navigator.clipboard.writeText(`${shareText}\n${shareUrl}`);
+    alert("Текст и ссылка скопированы в буфер обмена.");
   } catch (_error) {
-    alert("Не удалось поделиться автоматически. Попробуйте вручную.");
+    alert("Не удалось поделиться. Используйте «Копировать ссылку».");
   }
 });
+
+if (copyLinkBtn) {
+  copyLinkBtn.addEventListener("click", async () => {
+    const url = getShareUrlWithParams();
+    try {
+      await navigator.clipboard.writeText(url);
+      alert("Ссылка скопирована — при открытии подставятся даты расчёта.");
+    } catch {
+      prompt("Скопируйте ссылку:", url);
+    }
+  });
+}
+
+if (printPdfBtn) {
+  printPdfBtn.addEventListener("click", () => {
+    if (!latestResult) return;
+    window.print();
+  });
+}
 
 downloadPngBtn.addEventListener("click", async () => {
   if (!latestResult) return;
@@ -313,6 +552,20 @@ themeToggle.addEventListener("click", () => {
 
 initTheme();
 
+setupGeoSuggest("city1", "geoSuggest1", "timezone1");
+setupGeoSuggest("city2", "geoSuggest2", "timezone2");
+
+(() => {
+  const params = new URLSearchParams(window.location.search);
+  if (!params.has("birth1") || !params.has("birth2")) return;
+  applyQueryToForm(params);
+  if (typeof compatibilityForm.requestSubmit === "function") {
+    compatibilityForm.requestSubmit();
+  } else {
+    compatibilityForm.dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }));
+  }
+})();
+
 window.tsParticlesInstance = null;
 
 tsParticles.load("particles", {
@@ -368,7 +621,10 @@ let chatInitialized = localStorage.getItem("chat-initialized") === "true";
 
 function initChat() {
   if (!chatInitialized) {
-    addMessage("Привет! Я — эксперт по отношениям. Расскажите, что вас беспокоит, и мы вместе разберёмся.", "assistant");
+    addMessage(
+      "Привет! Я коуч по отношениям — отвечу бесплатно, без регистрации. Переписку не показываем другим. Расскажите, что хотите разобрать.",
+      "assistant",
+    );
     chatInitialized = true;
     localStorage.setItem("chat-initialized", "true");
   }
@@ -400,9 +656,11 @@ function addMessage(text, role) {
 
 function showTyping() {
   const div = document.createElement("div");
-  div.className = "chat-message typing";
-  div.textContent = "Печатает...";
+  div.className = "chat-message typing typing-indicator";
   div.id = "typingIndicator";
+  div.setAttribute("aria-live", "polite");
+  div.innerHTML =
+    '<span class="typing-label">Эксперт отвечает</span><span class="typing-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span>';
   chatMessages.appendChild(div);
   chatMessages.scrollTop = chatMessages.scrollHeight;
   return div;
@@ -417,6 +675,10 @@ chatForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const message = chatInput.value.trim();
   if (!message) return;
+
+  const sendBtn = chatForm.querySelector(".chat-send");
+  if (sendBtn) sendBtn.disabled = true;
+  chatInput.disabled = true;
 
   addMessage(message, "user");
   chatInput.value = "";
@@ -438,6 +700,10 @@ chatForm.addEventListener("submit", async (event) => {
     addMessage(data.reply, "assistant");
   } catch (error) {
     typing.remove();
-    addMessage("Ошибка соед��нения. Попробуйте ещё раз.", "assistant");
+    addMessage("Ошибка соединения. Попробуйте ещё раз.", "assistant");
+  } finally {
+    if (sendBtn) sendBtn.disabled = false;
+    chatInput.disabled = false;
+    chatInput.focus();
   }
 });

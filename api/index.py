@@ -5,6 +5,7 @@ import swisseph as swe
 from dotenv import load_dotenv
 import os
 import json
+import time
 import requests
 
 load_dotenv()
@@ -17,10 +18,103 @@ RELATION_PROFILES = {"romance": {"label": "Романтика", "base": 7, "stre
 
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
 DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "").strip()
 
-SYSTEM_PROMPT = """Ты — опытный эксперт-коуч по отношениям. Даёшь тёплые, конкретные советы. Отвечай на русском как друг."""
+SYSTEM_PROMPT = """Ты — опытный эксперт-коуч по отношениям. Даёшь тёплые, конкретные советы. Отвечай на русском как друг.
+
+Формат: кратко, до 3–5 абзацев, без длинных вступлений."""
+
+
+def _tg_escape(s):
+    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def format_lead_telegram_html(name, contact, message_body, context, *, at_dt=None):
+    ctx = context or {}
+    lines = []
+    header = "📋 <b>Новая заявка</b> <i>(сайт / Vercel)</i>"
+    lines.append(header)
+    if at_dt is not None:
+        utc = at_dt.astimezone(timezone.utc) if at_dt.tzinfo else at_dt.replace(tzinfo=timezone.utc)
+        lines.append(f"🕐 {utc.strftime('%Y-%m-%d %H:%M')} UTC")
+    lines.append("")
+    lines.append(f"<b>Имя:</b> {_tg_escape(name)}")
+    lines.append(f"<b>Контакт:</b> {_tg_escape(contact)}")
+    msg = message_body or "—"
+    if len(msg) > 2800:
+        msg = msg[:2797] + "…"
+    lines.append(f"<b>Сообщение:</b> {_tg_escape(msg)}")
+    score = ctx.get("score")
+    rel = (ctx.get("relationType") or "").strip()
+    c1 = (ctx.get("city1") or "").strip()
+    c2 = (ctx.get("city2") or "").strip()
+    tz1 = (ctx.get("timezone1") or "").strip()
+    tz2 = (ctx.get("timezone2") or "").strip()
+    if score is not None or rel or c1 or c2 or tz1 or tz2:
+        lines.append("")
+        lines.append("<b>Контекст калькулятора:</b>")
+        if score is not None:
+            lines.append(f"• Балл совместимости: {_tg_escape(str(score))}")
+        if rel:
+            lines.append(f"• Тип связи: {_tg_escape(rel)}")
+        if c1 or c2:
+            lines.append(f"• Города: {_tg_escape(c1 or '—')} / {_tg_escape(c2 or '—')}")
+        if tz1 or tz2:
+            lines.append(f"• Часовые пояса: {_tg_escape(tz1 or '—')} / {_tg_escape(tz2 or '—')}")
+    text = "\n".join(lines)
+    return text[:4090] + "…" if len(text) > 4090 else text
+
+
+def _telegram_proxy_dict():
+    raw = (
+        os.getenv("TELEGRAM_HTTPS_PROXY", "").strip()
+        or os.getenv("HTTPS_PROXY", "").strip()
+        or os.getenv("HTTP_PROXY", "").strip()
+    )
+    if not raw:
+        return None
+    return {"http": raw, "https": raw}
+
+
+def telegram_api_send(payload):
+    if not TELEGRAM_BOT_TOKEN:
+        return False, "no token"
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    proxies = _telegram_proxy_dict()
+    last_err = ""
+    for attempt in range(3):
+        try:
+            resp = requests.post(url, json=payload, timeout=18, proxies=proxies)
+            try:
+                data = resp.json()
+            except ValueError:
+                data = {}
+            if resp.status_code == 200 and isinstance(data, dict) and data.get("ok"):
+                return True, ""
+            last_err = resp.text[:400] if resp.text else str(resp.status_code)
+        except Exception as exc:
+            last_err = str(exc)
+        if attempt < 2:
+            time.sleep(0.6 * (2**attempt))
+    return False, last_err
+
+
+def send_lead_telegram(name, contact, message_body, context):
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        return
+    text = format_lead_telegram_html(
+        name, contact, message_body, context, at_dt=datetime.now(timezone.utc)
+    )
+    payload = {
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text": text,
+        "parse_mode": "HTML",
+        "disable_web_page_preview": True,
+    }
+    ok, err = telegram_api_send(payload)
+    if not ok:
+        print(f"Telegram (Vercel): не отправлено — {err[:400]}")
 
 def parse_tz(tz):
     if not tz: return timezone.utc
@@ -114,6 +208,7 @@ def handler(req):
             return {"statusCode": 500, "headers": {"Content-Type": "application/json"}, "body": json.dumps({"error": str(e)})}
     
     if path == "/api/chat" and method == "POST":
+        message = (payload.get("message") or "").strip()
         if not message:
             return {"statusCode": 400, "headers": {"Content-Type": "application/json"}, "body": json.dumps({"error": "Введите сообщение"})}
         
@@ -124,8 +219,14 @@ def handler(req):
             resp = requests.post(
                 f"{DEEPSEEK_BASE_URL}/v1/chat/completions",
                 headers={"Authorization": f"Bearer {DEEPSEEK_API_KEY}", "Content-Type": "application/json"},
-                json={"model": "deepseek-chat", "messages": [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": message}], "temperature": 0.7, "max_tokens": 400},
-                timeout=25
+                json={
+                    "model": "deepseek-chat",
+                    "messages": [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": message}],
+                    "temperature": 0.65,
+                    "max_tokens": 380,
+                    "top_p": 0.9,
+                },
+                timeout=40
             )
             reply = resp.json()["choices"][0]["message"]["content"]
         except:
@@ -142,14 +243,9 @@ def handler(req):
         if not name or not contact:
             return {"statusCode": 400, "headers": {"Content-Type": "application/json"}, "body": json.dumps({"error": "Введите имя и контакт"})}
         
-        if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
-            try:
-                url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-                requests.post(url, json={"chat_id": TELEGRAM_CHAT_ID, "text": f"Заявка: {name}\n{contact}\n{message or '-'}"}, timeout=5)
-            except:
-                pass
-        
-        return {"statusCode": 200, "headers": {"Content-Type": "application/json"}, "body": json.dumps({"ok": True})}
+        send_lead_telegram(name, contact, message, payload.get("context") or {})
+
+        return {"statusCode": 200, "headers": {"Content-Type": "application/json"}, "body": json.dumps({"ok": True, "message": "Заявка отправлена"})}
     
     if path == "/leads":
         return {"statusCode": 200, "headers": {"Content-Type": "text/html"}, "body": "<html><body><h1>Заявки</h1><p>Заявок пока нет</p></body></html>"}

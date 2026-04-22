@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Как мы считаем совместимость — методология</title>
+    <meta
+      name="description"
+      content="Методология калькулятора: Swiss Ephemeris, аспекты планет, нумерология и китайский цикл года."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body class="mystic-body">
+    <div class="decor-stars mystic-stars-static" aria-hidden="true"></div>
+    <div class="decor-moon" aria-hidden="true"></div>
+    <main class="page inner-page">
+      <header class="inner-page-header card">
+        <nav class="nav-row">
+          <a class="nav-back" href="./index.html">← К калькулятору</a>
+          <button type="button" class="btn secondary btn-compact" id="methodThemeToggle" aria-label="Сменить тему">
+            Тема
+          </button>
+        </nav>
+        <p class="tag">Методология</p>
+        <h1 class="page-title">Как мы считаем совместимость</h1>
+        <p class="subtitle prose-intro">
+          Калькулятор сочетает несколько символических систем. Результат носит развлекательный и
+          самопознавательный характер и не заменяет психотерапию, медицинские или юридические советы.
+        </p>
+      </header>
+
+      <article class="card content-section">
+        <h2 class="section-heading">Астрология (западная)</h2>
+        <div class="prose">
+          <p>
+            Положения планет берутся по эфемеридам <strong>Swiss Ephemeris</strong> с учётом даты, времени (если
+            указано) и часового пояса IANA. Считаются долготы Солнца, Луны, Меркурия, Венеры, Марса, Юпитера и
+            Сатурна для каждого партнёра. Между картами оцениваются угловые соотношения (аспекты): насколько близко
+            угол между двумя планетами к классическим значениям (соединение, секстиль, квадрат, трин, оппозиция).
+            Чем меньше отклонение (орб), тем сильнее считается влияние пары аспектов.
+          </p>
+        </div>
+      </article>
+
+      <article class="card content-section">
+        <h2 class="section-heading">Нумерология</h2>
+        <div class="prose">
+          <p>
+            Используется число жизненного пути по дате рождения и при наличии имён — число судьбы по буквам имени
+            (пифагорейская таблица + кириллица). Личный год считается для текущего календарного года.
+          </p>
+        </div>
+      </article>
+
+      <article class="card content-section">
+        <h2 class="section-heading">Китайский гороскоп</h2>
+        <div class="prose">
+          <p>
+            Животное и стихия года определяются по году рождения в традиционном 12-летнем цикле и цикле пяти
+            стихий (упрощённая модель).
+          </p>
+        </div>
+      </article>
+
+      <article class="card content-section">
+        <h2 class="section-heading">Итоговый балл</h2>
+        <div class="prose">
+          <p>
+            Компоненты (тип отношений, стихии знаков Солнца, нумерология, китайская пара, аспекты личных и
+            социальных планет) суммируются и нормируются в шкалу 30–100. Это не предсказание будущего, а способ
+            структурировать размышления о паре.
+          </p>
+        </div>
+      </article>
+
+      <footer class="inner-footer card">
+        <p class="prose muted-small"><a href="./index.html">Вернуться к калькулятору</a></p>
+      </footer>
+    </main>
+    <script>
+      (function () {
+        var saved = localStorage.getItem("compat-theme");
+        var light = window.matchMedia("(prefers-color-scheme: light)").matches;
+        document.documentElement.setAttribute("data-theme", saved || (light ? "light" : "dark"));
+        var btn = document.getElementById("methodThemeToggle");
+        if (btn) {
+          btn.addEventListener("click", function () {
+            var cur = document.documentElement.getAttribute("data-theme") || "dark";
+            var next = cur === "dark" ? "light" : "dark";
+            document.documentElement.setAttribute("data-theme", next);
+            localStorage.setItem("compat-theme", next);
+          });
+        }
+      })();
+    </script>
+  </body>
+</html>
