@@ -555,6 +555,8 @@ setupGeoSuggest("city2", "geoSuggest2", "timezone2");
 
 (() => {
   const params = new URLSearchParams(window.location.search);
+  // Параметры _ym* добавляет Метрика (проверка счётчика, отладка). Автоотправка формы даёт replaceState и лишнюю нагрузку до загрузки tag.js.
+  if ([...params.keys()].some((k) => k.startsWith("_ym"))) return;
   if (!params.has("birth1") || !params.has("birth2")) return;
   applyQueryToForm(params);
   if (typeof compatibilityForm.requestSubmit === "function") {
