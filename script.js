@@ -59,6 +59,27 @@ const ZODIAC_SIGN_SLUG = {
   Рыбы: "ryby",
 };
 
+/** Родительный падеж после «у» (у Козерога, у Рыб). */
+const SIGN_RU_GENITIVE = {
+  Овен: "Овна",
+  Телец: "Тельца",
+  Близнецы: "Близнецов",
+  Рак: "Рака",
+  Лев: "Льва",
+  Дева: "Девы",
+  Весы: "Весов",
+  Скорпион: "Скорпиона",
+  Стрелец: "Стрельца",
+  Козерог: "Козерога",
+  Водолей: "Водолея",
+  Рыбы: "Рыб",
+};
+
+function signRuGenitive(nameRu) {
+  const s = (nameRu || "").trim();
+  return SIGN_RU_GENITIVE[s] || s;
+}
+
 const VALID_SIGN_SLUG_SET = new Set(Object.values(ZODIAC_SIGN_SLUG));
 
 /** Даты середины знака (полдень в TZ формы → совпадает с логикой API): подстановка из хэша #sovmestimost/… */
@@ -358,11 +379,14 @@ function buildSeoPairArticle(sign1Ru, sign2Ru, slug1, slug2) {
   const pairKey = seoSlugPairKey(slug1, slug2);
   const hand = pairKey ? SEO_PAIR_HANDCRAFTED[pairKey] : "";
   if (hand) {
-    return `${sign1Ru} и ${sign2Ru}. ${hand}${end}`;
+    return `${hand}${end}`;
   }
   const base = seoBaseParagraphByElements(e1, e2);
-  const mid = ` У ${sign1Ru} заметны ${t1}, у ${sign2Ru} — ${t2}; ищите баланс без попытки «переучить» друг друга.`;
-  return `${sign1Ru} и ${sign2Ru}. ${base}${mid}${end}`;
+  const mid =
+    sign1Ru === sign2Ru
+      ? ` У обоих заметны ${t1}; ищите баланс между опорой на привычное и мягкой сменой ролей.`
+      : ` У ${signRuGenitive(sign1Ru)} заметны ${t1}, у ${signRuGenitive(sign2Ru)} — ${t2}; ищите баланс без попытки «переучить» друг друга.`;
+  return `${base}${mid}${end}`;
 }
 
 function signRuToSlug(signName) {
@@ -469,22 +493,27 @@ function addSchemaMarkup(sign1, sign2, rating) {
   document.head.appendChild(script);
 }
 
+function setSeoToggleUi(expanded) {
+  const btn = document.getElementById("toggle-seo-text");
+  if (!btn) return;
+  btn.setAttribute("aria-expanded", expanded ? "true" : "false");
+  const lbl = btn.querySelector(".seo-text-toggle__label");
+  const icon = btn.querySelector(".seo-text-toggle__icon");
+  if (lbl) lbl.textContent = expanded ? "Свернуть" : "Читать подробнее";
+  if (icon) icon.textContent = expanded ? "▲" : "▼";
+}
+
 function showSEOText(sign1, sign2, bodyText) {
   const block = document.getElementById("seo-text-block");
   const h3 = document.getElementById("seo-h3-signs");
   const content = document.getElementById("seo-text-content");
   const coll = document.getElementById("seo-text-collapsible");
-  const btn = document.getElementById("toggle-seo-text");
   if (!block || !h3 || !content) return;
   h3.textContent = `${sign1} и ${sign2}`;
   content.textContent = bodyText;
   block.classList.remove("hidden");
   if (coll) coll.classList.remove("seo-text-collapsible--expanded");
-  if (btn) {
-    btn.setAttribute("aria-expanded", "false");
-    const icon = btn.querySelector(".seo-text-toggle__icon");
-    if (icon) icon.textContent = "▼";
-  }
+  setSeoToggleUi(false);
 }
 
 function resetSeoToDefaults() {
@@ -500,12 +529,7 @@ function resetSeoToDefaults() {
     block.classList.add("hidden");
     const coll = document.getElementById("seo-text-collapsible");
     if (coll) coll.classList.remove("seo-text-collapsible--expanded");
-    const btn = document.getElementById("toggle-seo-text");
-    if (btn) {
-      btn.setAttribute("aria-expanded", "false");
-      const icon = btn.querySelector(".seo-text-toggle__icon");
-      if (icon) icon.textContent = "▼";
-    }
+    setSeoToggleUi(false);
   }
 }
 
@@ -521,7 +545,7 @@ function applyResultSeo(result) {
     updateSEO(sign1, sign2, typeLoc);
     addSchemaMarkup(sign1, sign2, Number(result.total) || 0);
     const fallback =
-      `${sign1} и ${sign2}: стихии ${result.western.element1} и ${result.western.element2}. ` +
+      `Стихии ${result.western.element1} и ${result.western.element2}. ` +
       `Балл совместимости в расчёте — ${result.total} из 100. Подробнее по аспектам, нумерологии и китайскому циклу — в блоках выше; ` +
       `это развлекательный ориентир, а не медицинское или юридическое заключение.`;
     const article = slug1 && slug2 ? buildSeoPairArticle(sign1, sign2, slug1, slug2) : "";
@@ -1048,9 +1072,7 @@ if (toggleSeoBtn) {
     const coll = document.getElementById("seo-text-collapsible");
     if (!coll) return;
     const expanded = coll.classList.toggle("seo-text-collapsible--expanded");
-    toggleSeoBtn.setAttribute("aria-expanded", expanded ? "true" : "false");
-    const icon = toggleSeoBtn.querySelector(".seo-text-toggle__icon");
-    if (icon) icon.textContent = expanded ? "▲" : "▼";
+    setSeoToggleUi(expanded);
   });
 }
 

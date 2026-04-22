@@ -406,21 +406,27 @@ body {
 }
 
 .hero-actions {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
+  align-items: stretch;
+  justify-items: stretch;
+  min-width: min(100%, 320px);
 }
 
 .hero-actions .btn {
   text-decoration: none;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  text-align: center;
+  min-height: 44px;
+  width: 100%;
+  white-space: normal;
 }
 
 .theme-toggle {
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .city-field {
@@ -1022,15 +1028,12 @@ li {
   }
 
   .hero-actions {
-    justify-content: stretch;
     width: 100%;
+    min-width: 0;
   }
 
   .hero-actions .btn {
-    flex: 1;
-    justify-content: center;
     min-height: 44px;
-    text-align: center;
   }
 
   .chart-wrap {
@@ -1462,13 +1465,13 @@ li {
 }
 
 .seo-text-collapsible {
-  max-height: 4.6em;
-  overflow: hidden;
-  transition: max-height 0.35s ease;
+  display: none;
+  margin-top: 0;
 }
 
 .seo-text-collapsible.seo-text-collapsible--expanded {
-  max-height: 80rem;
+  display: block;
+  margin-top: 8px;
 }
 
 .seo-text-content {
@@ -1490,6 +1493,10 @@ li {
   cursor: pointer;
   text-decoration: underline;
   text-underline-offset: 3px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 .seo-text-toggle:hover {
