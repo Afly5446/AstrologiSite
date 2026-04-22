@@ -774,6 +774,12 @@ def index() -> Any:
     return send_from_directory(BASE_DIR, "index.html")
 
 
+@app.get("/favicon.ico")
+def favicon_ico() -> Any:
+    """Браузеры часто запрашивают /favicon.ico до загрузки HTML; отдаём тот же SVG."""
+    return send_from_directory(BASE_DIR, "favicon.svg", mimetype="image/svg+xml")
+
+
 def _telegram_escape(text: str) -> str:
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
