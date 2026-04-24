@@ -13,7 +13,7 @@ RUN pip install --no-cache-dir -r /app/backend/requirements.txt
 
 # Код (корень = BASE_DIR для отдачи index.html, script.js, …)
 COPY backend /app/backend
-COPY index.html methodology.html script.js styles.css favicon.svg yandex_*.html /app/
+COPY index.html methodology.html script.js styles.css favicon.svg yandex_*.html robots.txt sitemap.xml /app/
 
 EXPOSE 8000
 ENV PORT=8000

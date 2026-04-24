@@ -9,7 +9,8 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, Response, jsonify, request, send_from_directory
+from xml.sax.saxutils import escape as xml_escape
 import requests
 from sqlalchemy import JSON, DateTime, Integer, String, create_engine, select
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
@@ -772,6 +773,44 @@ def build_compatibility(payload: dict[str, Any]) -> dict[str, Any]:
 @app.get("/")
 def index() -> Any:
     return send_from_directory(BASE_DIR, "index.html")
+
+
+def _canonical_public_base() -> str:
+    """https://домен без завершающего / — для robots.txt и sitemap.xml (Яндекс/Google)."""
+    env = os.getenv("PUBLIC_SITE_URL", "").strip().rstrip("/")
+    if env:
+        return env
+    return (request.url_root or "").rstrip("/")
+
+
+@app.get("/robots.txt")
+def robots_txt() -> Any:
+    base = _canonical_public_base()
+    lines = ["User-agent: *", "Allow: /", ""]
+    if base:
+        lines.append(f"Sitemap: {base}/sitemap.xml")
+    return Response("\n".join(lines) + "\n", mimetype="text/plain; charset=utf-8")
+
+
+@app.get("/sitemap.xml")
+def sitemap_xml() -> Any:
+    base = _canonical_public_base()
+    if not base:
+        empty = '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>'
+        return Response(empty, mimetype="application/xml; charset=utf-8")
+    today = datetime.now(timezone.utc).date().isoformat()
+    u1 = xml_escape(f"{base}/")
+    u2 = xml_escape(f"{base}/methodology.html")
+    body = "\n".join(
+        [
+            '<?xml version="1.0" encoding="UTF-8"?>',
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+            f"  <url><loc>{u1}</loc><lastmod>{today}</lastmod><changefreq>weekly</changefreq><priority>1.0</priority></url>",
+            f"  <url><loc>{u2}</loc><lastmod>{today}</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>",
+            "</urlset>",
+        ]
+    )
+    return Response(body + "\n", mimetype="application/xml; charset=utf-8")
 
 
 @app.get("/favicon.ico")
